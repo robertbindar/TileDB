@@ -296,7 +296,7 @@ int32_t tiledb_vfs_mode_from_str(const char* str, tiledb_vfs_mode_t* vfs_mode) {
   return TILEDB_OK;
 }
 
-}  // namespace detail
+}  // namespace tiledb::common::detail
 
 int32_t tiledb_query_type_to_str(
     tiledb_query_type_t query_type, const char** str) {
