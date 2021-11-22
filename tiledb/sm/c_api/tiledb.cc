@@ -82,7 +82,7 @@ using namespace tiledb::common;
 /*       ENUMS TO/FROM STR        */
 /* ****************************** */
 
-namespace detail {
+namespace tiledb::common::detail {
 
 int32_t tiledb_query_type_to_str(
     tiledb_query_type_t query_type, const char** str) {
