@@ -29,16 +29,25 @@ jobs:
             TILEDB_ARROW_TESTS: ON
             TILEDB_SERIALIZATION: OFF
             TILEDB_S3: OFF
+            TILEDB_EXPERIMENTAL_FEATURES: OFF
           - environ: 's3'
             TILEDB_S3: ON
             TILEDB_ARROW_TESTS: ON
             TILEDB_SERIALIZATION: OFF
             TILEDB_AZURE: OFF
+            TILEDB_EXPERIMENTAL_FEATURES: OFF
           - environ: 'serialization'
             TILEDB_S3: OFF
             TILEDB_AZURE: OFF
             TILEDB_ARROW_TESTS: OFF
             TILEDB_SERIALIZATION: ON
+            TILEDB_EXPERIMENTAL_FEATURES: OFF
+          - environ: 'experimental'
+            TILEDB_EXPERIMENTAL_FEATURES: ON
+            TILEDB_S3: OFF
+            TILEDB_AZURE: OFF
+            TILEDB_ARROW_TESTS: OFF
+            TILEDB_SERIALIZATION: OFF
     env:
       TILEDB_HOME: ${{ github.workspace }}
       TILEDB_GA_IMAGE_NAME: ${{ matrix.os }}
@@ -46,6 +55,7 @@ jobs:
       TILEDB_AZURE: ${{ matrix.TILEDB_AZURE }} #azure }}
       TILEDB_SERIALIZATION: ${{ matrix.TILEDB_SERIALIZATION }} #serialization }}
       TILEDB_ARROW_TESTS: ${{ matrix.TILEDB_ARROW_TESTS }}
+      TILEDB_EXPERIMENTAL_FEATURES: ${{ matrix.TILEDB_EXPERIMENTAL_FEATURES }}
     steps:
       - name: 'tiledb env prep'
         run: |
@@ -139,6 +149,9 @@ jobs:
           }
           if ($env:TILEDB_SERIALIZATION -eq "ON") {
             $bootstrapOptions = "-EnableSerialization " + $bootstrapOptions
+          }
+          if ($env:TILEDB_EXPERIMENTAL_FEATURES -eq "ON") {
+            $bootstrapOptions = "-EnableExperimentalFeatures " + $bootstrapOptions
           }
           # static already added above as initial default
           # if ($env:TILEDB_STATIC -eq "ON") {
