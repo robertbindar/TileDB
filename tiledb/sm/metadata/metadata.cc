@@ -54,6 +54,19 @@ Metadata::Metadata() {
   timestamp_range_ = std::make_pair(t, t);
 }
 
+Metadata::Metadata(const std::map<std::string, MetadataValue>& metadata_map) {
+  clear();
+
+  auto t = utils::time::timestamp_now_ms();
+  timestamp_range_ = std::make_pair(t, t);
+
+  for (auto it = metadata_map.begin(); it != metadata_map.end(); ++it) {
+    metadata_map_[it->first] = it->second;
+  }
+
+  build_metadata_index();
+}
+
 Metadata::Metadata(const Metadata& rhs)
     : metadata_map_(rhs.metadata_map_)
     , timestamp_range_(rhs.timestamp_range_)
@@ -61,6 +74,15 @@ Metadata::Metadata(const Metadata& rhs)
     , uri_(rhs.uri_) {
   if (!rhs.metadata_index_.empty())
     build_metadata_index();
+}
+
+Metadata& Metadata::operator=(const Metadata& other) {
+  metadata_map_ = other.metadata_map_;
+  timestamp_range_ = other.timestamp_range_;
+  loaded_metadata_uris_ = other.loaded_metadata_uris_;
+  uri_ = other.uri_;
+  build_metadata_index();
+  return *this;
 }
 
 Metadata::~Metadata() = default;
@@ -98,13 +120,14 @@ Status Metadata::generate_uri(const URI& array_uri) {
   return Status::Ok();
 }
 
-Status Metadata::deserialize(
+std::tuple<Status, optional<std::shared_ptr<Metadata>>> Metadata::deserialize(
     const std::vector<tdb_shared_ptr<Buffer>>& metadata_buffs) {
-  clear();
-
+  std::map<std::string, MetadataValue> metadata_map;
   if (metadata_buffs.empty())
-    return Status::Ok();
+    return {Status::Ok(),
+            tiledb::common::make_shared<Metadata>(HERE(), metadata_map)};
 
+  Status st;
   uint32_t key_len;
   char del;
   size_t value_len;
@@ -112,12 +135,18 @@ Status Metadata::deserialize(
     // Iterate over all items
     buff->reset_offset();
     while (buff->offset() != buff->size()) {
-      RETURN_NOT_OK(buff->read(&key_len, sizeof(uint32_t)));
+      st = buff->read(&key_len, sizeof(uint32_t));
+      if (!st.ok()) {
+        return {st, nullopt};
+      }
       std::string key((const char*)buff->cur_data(), key_len);
       buff->advance_offset(key_len);
-      RETURN_NOT_OK(buff->read(&del, sizeof(char)));
+      st = buff->read(&del, sizeof(char));
+      if (!st.ok()) {
+        return {st, nullopt};
+      }
 
-      metadata_map_.erase(key);
+      metadata_map.erase(key);
 
       // Handle deletion
       if (del)
@@ -125,24 +154,31 @@ Status Metadata::deserialize(
 
       MetadataValue value_struct;
       value_struct.del_ = del;
-      RETURN_NOT_OK(buff->read(&value_struct.type_, sizeof(char)));
-      RETURN_NOT_OK(buff->read(&value_struct.num_, sizeof(uint32_t)));
+      st = buff->read(&value_struct.type_, sizeof(char));
+      if (!st.ok()) {
+        return {st, nullopt};
+      }
+      st = buff->read(&value_struct.num_, sizeof(uint32_t));
+      if (!st.ok()) {
+        return {st, nullopt};
+      }
       if (value_struct.num_) {
         value_len = value_struct.num_ *
                     datatype_size(static_cast<Datatype>(value_struct.type_));
         value_struct.value_.resize(value_len);
-        RETURN_NOT_OK(buff->read((void*)value_struct.value_.data(), value_len));
+        st = buff->read((void*)value_struct.value_.data(), value_len);
+        if (!st.ok()) {
+          return {st, nullopt};
+        }
       }
 
       // Insert to metadata
-      metadata_map_.emplace(std::make_pair(key, std::move(value_struct)));
+      metadata_map.emplace(std::make_pair(key, std::move(value_struct)));
     }
   }
 
-  build_metadata_index();
-  // Note: `metadata_map_` and `metadata_index_` are immutable after this point
-
-  return Status::Ok();
+  return {Status::Ok(),
+          tiledb::common::make_shared<Metadata>(HERE(), metadata_map)};
 }
 
 Status Metadata::serialize(Buffer* buff) const {

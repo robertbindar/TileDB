@@ -89,8 +89,14 @@ class Metadata {
   /** Constructor. */
   Metadata();
 
+  /** Constructor. */
+  Metadata(const std::map<std::string, MetadataValue>& metadata_map);
+
   /** Copy constructor. */
   Metadata(const Metadata& rhs);
+
+  /** Copy assignment. */
+  Metadata& operator=(const Metadata& other);
 
   /** Destructor. */
   ~Metadata();
@@ -113,7 +119,8 @@ class Metadata {
    * assummed to be sorted on time. The function will take care of any
    * deleted or overwritten metadata items considering the order.
    */
-  Status deserialize(const std::vector<tdb_shared_ptr<Buffer>>& metadata_buffs);
+  static std::tuple<Status, optional<std::shared_ptr<Metadata>>> deserialize(
+      const std::vector<tdb_shared_ptr<Buffer>>& metadata_buffs);
 
   /** Serializes all key-value metadata items into the input buffer. */
   Status serialize(Buffer* buff) const;
