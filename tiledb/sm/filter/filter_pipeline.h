@@ -62,6 +62,15 @@ class FilterPipeline {
   /** Constructor. Initializes an empty pipeline. */
   FilterPipeline();
 
+  /** Constructor. 
+  * 
+  * @param max_chunk_size.
+  * @param filters The vector of filters.
+  */
+  FilterPipeline(
+      uint32_t max_chunk_size,
+      const std::vector<std::shared_ptr<Filter>>& filters);
+
   /** Destructor. */
   ~FilterPipeline() = default;
 
@@ -92,9 +101,9 @@ class FilterPipeline {
    * Populates the filter pipeline from the data in the input binary buffer.
    *
    * @param buff The buffer to deserialize from.
-   * @return Status
+   * @return Status and FilterPipeline
    */
-  Status deserialize(ConstBuffer* buff);
+  static std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>> deserialize(ConstBuffer* buff);
 
   /**
    * Dumps the filter pipeline details in ASCII format in the selected
@@ -255,7 +264,7 @@ class FilterPipeline {
   typedef std::pair<FilterBuffer, FilterBuffer> FilterBufferPair;
 
   /** The ordered list of filters comprising the pipeline. */
-  std::vector<tdb_unique_ptr<Filter>> filters_;
+  std::vector<std::shared_ptr<Filter>> filters_;
 
   /** The max chunk size allowed within tiles. */
   uint32_t max_chunk_size_;

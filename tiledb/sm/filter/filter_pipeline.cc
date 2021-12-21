@@ -55,6 +55,13 @@ FilterPipeline::FilterPipeline()
     : max_chunk_size_(constants::max_tile_chunk_size) {
 }
 
+FilterPipeline::FilterPipeline(
+    uint32_t max_chunk_size,
+    const std::vector<std::shared_ptr<Filter>>& filters)
+    : filters_(filters) 
+    ,max_chunk_size_(max_chunk_size) {
+}
+
 FilterPipeline::FilterPipeline(const FilterPipeline& other) {
   for (auto& filter : other.filters_) {
     add_filter(*filter);
@@ -80,7 +87,7 @@ FilterPipeline& FilterPipeline::operator=(FilterPipeline&& other) {
 }
 
 Status FilterPipeline::add_filter(const Filter& filter) {
-  tdb_unique_ptr<Filter> copy(filter.clone());
+  std::shared_ptr<Filter> copy(filter.clone());
   filters_.push_back(std::move(copy));
   return Status::Ok();
 }
@@ -488,23 +495,43 @@ Status FilterPipeline::serialize(Buffer* buff) const {
   return Status::Ok();
 }
 
-Status FilterPipeline::deserialize(ConstBuffer* buff) {
-  // Remove any old filters.
-  clear();
+std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>>
+FilterPipeline::deserialize(ConstBuffer* buff) {
+  Status st;
+  uint32_t max_chunk_size;
+  std::vector<std::shared_ptr<Filter>> filters;
 
-  RETURN_NOT_OK(buff->read(&max_chunk_size_, sizeof(uint32_t)));
+  st = buff->read(&max_chunk_size, sizeof(uint32_t));
+  if (!st.ok()) {
+    return {st, nullopt};
+  }
   uint32_t num_filters;
-  RETURN_NOT_OK(buff->read(&num_filters, sizeof(uint32_t)));
+  st = buff->read(&num_filters, sizeof(uint32_t));
+  if (!st.ok()) {
+    return {st, nullopt};
+  }
 
   for (uint32_t i = 0; i < num_filters; i++) {
     Filter* filter;
-    RETURN_NOT_OK(FilterCreate::deserialize(buff, &filter));
-    RETURN_NOT_OK_ELSE(add_filter(*filter), tdb_delete(filter));
-    tdb_delete(filter);
-  }
+    st = FilterCreate::deserialize(buff, &filter);
+    if (!st.ok()) {
+      tdb_delete(filter);
+      return {st, nullopt};
+    }
+    if (filter != nullptr) {
+      std::shared_ptr<Filter> f(filter);
+      filters.push_back(f);
+    } 
+    }
+ 
 
-  return Status::Ok();
-}
+  return {
+      Status::Ok(), tiledb::common::make_shared<FilterPipeline>(HERE(),
+      max_chunk_size,
+      filters
+        )
+  };
+  }
 
 void FilterPipeline::dump(FILE* out) const {
   if (out == nullptr)

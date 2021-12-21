@@ -137,8 +137,10 @@ std::tuple<Status, std::optional<Attribute>> Attribute::deserialize(
     return {st, std::nullopt};
 
   // Load filter pipeline
-  FilterPipeline filter_pipeline;
-  filter_pipeline.deserialize(buff);
+  auto&& [st_filterpipeline, filterpipeline]{FilterPipeline::deserialize(buff)};
+  if (!st_filterpipeline.ok()) {
+    return {st_filterpipeline, nullopt};
+  }
 
   // Load fill value
   uint64_t fill_value_size = 0;
@@ -180,7 +182,7 @@ std::tuple<Status, std::optional<Attribute>> Attribute::deserialize(
               datatype,
               nullable,
               cell_val_num,
-              filter_pipeline,
+              *filterpipeline.value(),
               fill_value,
               fill_value_validity)};
 }

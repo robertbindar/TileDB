@@ -162,7 +162,11 @@ Status Dimension::deserialize(
     RETURN_NOT_OK(buff->read(&cell_val_num_, sizeof(uint32_t)));
 
     // Load filter pipeline
-    RETURN_NOT_OK(filters_.deserialize(buff));
+    auto&& [st_filterpipeline, filterpipeline]{FilterPipeline::deserialize(buff)};
+    if (!st_filterpipeline.ok()) {
+      return st_filterpipeline;
+    }
+    filters_ = FilterPipeline(*filterpipeline.value());
   } else {
     type_ = type;
   }
