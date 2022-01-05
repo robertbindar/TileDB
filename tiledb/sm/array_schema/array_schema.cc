@@ -588,7 +588,8 @@ Status ArraySchema::deserialize(ConstBuffer* buff) {
     auto&& [st_cell_validity_filters, cell_validity_filters]{
         FilterPipeline::deserialize(buff)};
     if (!st_cell_validity_filters.ok()) {
-      return Status_ArraySchemaError("Cannot deserialize cell validity filters");
+      return Status_ArraySchemaError(
+          "Cannot deserialize cell validity filters");
     }
     cell_validity_filters_ = FilterPipeline(*cell_validity_filters.value());
   }

@@ -162,7 +162,8 @@ Status Dimension::deserialize(
     RETURN_NOT_OK(buff->read(&cell_val_num_, sizeof(uint32_t)));
 
     // Load filter pipeline
-    auto&& [st_filterpipeline, filterpipeline]{FilterPipeline::deserialize(buff)};
+    auto&& [st_filterpipeline, filterpipeline]{
+        FilterPipeline::deserialize(buff)};
     if (!st_filterpipeline.ok()) {
       return st_filterpipeline;
     }

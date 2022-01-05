@@ -58,8 +58,8 @@ FilterPipeline::FilterPipeline()
 FilterPipeline::FilterPipeline(
     uint32_t max_chunk_size,
     const std::vector<std::shared_ptr<Filter>>& filters)
-    : filters_(filters) 
-    ,max_chunk_size_(max_chunk_size) {
+    : filters_(filters)
+    , max_chunk_size_(max_chunk_size) {
 }
 
 FilterPipeline::FilterPipeline(const FilterPipeline& other) {
@@ -523,17 +523,13 @@ FilterPipeline::deserialize(ConstBuffer* buff) {
     if (filter != nullptr) {
       std::shared_ptr<Filter> f(filter);
       filters.push_back(f);
-    } 
     }
- 
-
-  return {
-      Status::Ok(), tiledb::common::make_shared<FilterPipeline>(HERE(),
-      max_chunk_size,
-      filters
-        )
-  };
   }
+
+  return {Status::Ok(),
+          tiledb::common::make_shared<FilterPipeline>(
+              HERE(), max_chunk_size, filters)};
+}
 
 void FilterPipeline::dump(FILE* out) const {
   if (out == nullptr)

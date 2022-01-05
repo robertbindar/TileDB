@@ -62,11 +62,11 @@ class FilterPipeline {
   /** Constructor. Initializes an empty pipeline. */
   FilterPipeline();
 
-  /** Constructor. 
-  * 
-  * @param max_chunk_size.
-  * @param filters The vector of filters.
-  */
+  /** Constructor.
+   *
+   * @param max_chunk_size.
+   * @param filters The vector of filters.
+   */
   FilterPipeline(
       uint32_t max_chunk_size,
       const std::vector<std::shared_ptr<Filter>>& filters);
@@ -103,7 +103,8 @@ class FilterPipeline {
    * @param buff The buffer to deserialize from.
    * @return Status and FilterPipeline
    */
-  static std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>> deserialize(ConstBuffer* buff);
+  static std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>>
+  deserialize(ConstBuffer* buff);
 
   /**
    * Dumps the filter pipeline details in ASCII format in the selected
