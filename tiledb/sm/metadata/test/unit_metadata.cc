@@ -32,6 +32,7 @@
 
 #include <catch.hpp>
 #include "../metadata.h"
+#include "tiledb/common/dynamic_memory/dynamic_memory.h"
 #include "tiledb/sm/buffer/buffer.h"
 #include "tiledb/sm/enums/datatype.h"
 #include "tiledb/sm/filesystem/uri.h"
@@ -78,8 +79,8 @@ TEST_CASE(
   buffer_metadata<uint32_t, 10>(p1) = value1_size;
   buffer_metadata<int32_t, 14>(p1) = 100;
   buffer_metadata<int32_t, 18>(p1) = 200;
-  metadata_buffs.push_back(std::make_shared<Buffer>(
-      &serialized_buffer1, sizeof(serialized_buffer1)));
+  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+      HERE(), &serialized_buffer1, sizeof(serialized_buffer1)));
 
   char serialized_buffer2[22];
   char* p2 = &serialized_buffer2[0];
@@ -90,8 +91,8 @@ TEST_CASE(
   buffer_metadata<char, 9>(p2) = (char)Datatype::FLOAT64;
   buffer_metadata<uint32_t, 10>(p2) = value2_size;
   buffer_metadata<double, 14>(p2) = value2;
-  metadata_buffs.push_back(std::make_shared<Buffer>(
-      &serialized_buffer2, sizeof(serialized_buffer2)));
+  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+      HERE(), &serialized_buffer2, sizeof(serialized_buffer2)));
 
   char serialized_buffer3[25];
   char* p3 = &serialized_buffer3[0];
@@ -102,8 +103,8 @@ TEST_CASE(
   buffer_metadata<char, 9>(p3) = (char)Datatype::STRING_ASCII;
   buffer_metadata<uint32_t, 10>(p3) = value3_size;
   std::memcpy(&buffer_metadata<char, 14>(p3), value3.c_str(), value3_size);
-  metadata_buffs.push_back(std::make_shared<Buffer>(
-      &serialized_buffer3, sizeof(serialized_buffer3)));
+  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+      HERE(), &serialized_buffer3, sizeof(serialized_buffer3)));
 
   auto&& [st_meta, meta]{Metadata::deserialize(metadata_buffs)};
 
