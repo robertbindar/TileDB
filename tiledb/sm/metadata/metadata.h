@@ -95,6 +95,9 @@ class Metadata {
   /** Copy constructor. */
   Metadata(const Metadata& rhs);
 
+  /** Move constructor. */
+  Metadata(Metadata&& other);
+
   /** Copy assignment. */
   Metadata& operator=(const Metadata& other);
 

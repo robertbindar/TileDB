@@ -49,21 +49,23 @@ namespace sm {
 /*     CONSTRUCTORS & DESTRUCTORS    */
 /* ********************************* */
 
-Metadata::Metadata() {
-  auto t = utils::time::timestamp_now_ms();
-  timestamp_range_ = std::make_pair(t, t);
+Metadata::Metadata()
+    : timestamp_range_([]() -> std::pair<uint64_t, uint64_t> {
+      auto t = utils::time::timestamp_now_ms();
+      return std::make_pair(t, t);
+    }()) {
 }
 
-Metadata::Metadata(const std::map<std::string, MetadataValue>& metadata_map) {
-  clear();
-
-  auto t = utils::time::timestamp_now_ms();
-  timestamp_range_ = std::make_pair(t, t);
-
-  for (auto it = metadata_map.begin(); it != metadata_map.end(); ++it) {
-    metadata_map_[it->first] = it->second;
-  }
-
+Metadata::Metadata(const std::map<std::string, MetadataValue>& metadata_map)
+    : metadata_map_(metadata_map)
+    , metadata_index_(
+          std::vector<std::pair<const std::string*, MetadataValue*>>())
+    , timestamp_range_([]() -> std::pair<uint64_t, uint64_t> {
+      auto t = utils::time::timestamp_now_ms();
+      return std::make_pair(t, t);
+    }())
+    , loaded_metadata_uris_(std::vector<URI>())
+    , uri_(URI()) {
   build_metadata_index();
 }
 
@@ -74,6 +76,14 @@ Metadata::Metadata(const Metadata& rhs)
     , uri_(rhs.uri_) {
   if (!rhs.metadata_index_.empty())
     build_metadata_index();
+}
+
+Metadata::Metadata(Metadata&& other)
+    : metadata_map_(std::move(other.metadata_map_))
+    , metadata_index_(std::move(other.metadata_index_))
+    , timestamp_range_(std::move(other.timestamp_range_))
+    , loaded_metadata_uris_(std::move(other.loaded_metadata_uris_))
+    , uri_(std::move(other.uri_)) {
 }
 
 Metadata& Metadata::operator=(const Metadata& other) {
@@ -124,8 +134,7 @@ std::tuple<Status, optional<std::shared_ptr<Metadata>>> Metadata::deserialize(
     const std::vector<tdb_shared_ptr<Buffer>>& metadata_buffs) {
   std::map<std::string, MetadataValue> metadata_map;
   if (metadata_buffs.empty())
-    return {Status::Ok(),
-            tiledb::common::make_shared<Metadata>(HERE(), metadata_map)};
+    return {Status::Ok(), tiledb::common::make_shared<Metadata>(HERE())};
 
   Status st;
   uint32_t key_len;
