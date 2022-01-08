@@ -514,16 +514,11 @@ FilterPipeline::deserialize(ConstBuffer* buff) {
   }
 
   for (uint32_t i = 0; i < num_filters; i++) {
-    Filter* filter;
-    st = FilterCreate::deserialize(buff, &filter);
-    if (!st.ok()) {
-      tdb_delete(filter);
-      return {st, nullopt};
+    auto&& [st_filter, filter]{FilterCreate::deserialize(buff)};
+    if (!st_filter.ok()) {
+      return {st_filter, nullopt};
     }
-    if (filter != nullptr) {
-      std::shared_ptr<Filter> f(filter);
-      filters.push_back(f);
-    }
+    filters.push_back(std::move(filter.value()));
   }
 
   return {Status::Ok(),
@@ -561,7 +556,7 @@ void FilterPipeline::swap(FilterPipeline& other) {
 Status FilterPipeline::append_encryption_filter(
     FilterPipeline* pipeline, const EncryptionKey& encryption_key) {
   switch (encryption_key.encryption_type()) {
-    case EncryptionType ::NO_ENCRYPTION:
+    case EncryptionType::NO_ENCRYPTION:
       return Status::Ok();
     case EncryptionType::AES_256_GCM:
       return pipeline->add_filter(EncryptionAES256GCMFilter(encryption_key));
