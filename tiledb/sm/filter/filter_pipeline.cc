@@ -515,8 +515,8 @@ FilterPipeline::deserialize(ConstBuffer* buff) {
 
   for (uint32_t i = 0; i < num_filters; i++) {
     auto&& [st_filter, filter]{FilterCreate::deserialize(buff)};
-    if(!st_filter.ok()) {
-      return {st_filter,nullopt};
+    if (!st_filter.ok()) {
+      return {st_filter, nullopt};
     }
     filters.push_back(std::move(filter.value()));
   }
