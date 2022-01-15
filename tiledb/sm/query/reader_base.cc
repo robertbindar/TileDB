@@ -1145,6 +1145,14 @@ Status ReaderBase::copy_partitioned_fixed_cells(
       }
     } else {  // Non-empty range
       if (stride == UINT64_MAX) {
+        if (cs.tile_->frag_idx() == search_frag_idx_ &&
+            cs.tile_->tile_idx() == search_tile_idx_) {
+          if (search_cell_idx_ >= cs.start_ &&
+              search_cell_idx_ <= cs.start_ + cs.length_) {
+            std::cout << "Copying fixed data for " << *name << "\n";
+          }
+        }
+
         if (!nullable)
           RETURN_NOT_OK(
               cs.tile_->read(*name, buffer, offset, cs.start_, cs_length));
@@ -1451,6 +1459,14 @@ Status ReaderBase::copy_partitioned_var_cells(
       break;
     }
     const auto& cs = (*result_cell_slabs)[cs_idx];
+
+    if (cs.tile_->frag_idx() == search_frag_idx_ &&
+        cs.tile_->tile_idx() == search_tile_idx_) {
+      if (search_cell_idx_ >= cs.start_ &&
+          search_cell_idx_ <= cs.start_ + cs.length_) {
+        std::cout << "Copying var data for " << *name << "\n";
+      }
+    }
 
     auto cs_length = cs.length_;
     if (cs_idx == copy_end_.first - 1) {

@@ -145,7 +145,7 @@ Status SparseIndexReaderBase::load_initial_data() {
     // This is ok as it is a soft limit and will be taken into consideration
     // later.
     RETURN_NOT_OK(subarray_.precompute_all_ranges_tile_overlap(
-        storage_manager_->compute_tp(), &result_tile_ranges_));
+        config_, storage_manager_->compute_tp(), &result_tile_ranges_));
 
     for (auto frag_result_tile_ranges : result_tile_ranges_) {
       memory_used_result_tile_ranges_ += frag_result_tile_ranges.size() *

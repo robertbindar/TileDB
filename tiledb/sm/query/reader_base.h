@@ -188,6 +188,11 @@ class ReaderBase : public StrategyBase {
   /** Was there an overflow during copying tiles. */
   bool copy_overflowed_;
 
+  uint64_t search_frag_idx_;
+  uint64_t search_tile_idx_;
+  uint64_t search_cell_idx_;
+  uint64_t search_range_idx_;
+
   /**
    * Used to specify where in the result cell slabs to end the copy
    * operations. First is the size of the result cell slabs, second is

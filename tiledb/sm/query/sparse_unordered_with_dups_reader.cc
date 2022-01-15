@@ -458,6 +458,29 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
 
   // Create result tiles.
   if (subarray_.is_set()) {
+    bool all_found = true;
+    bool found = false;
+    auto frag_idx_str = config_.get("debug.frag_idx.value", &found);
+    all_found &= found;
+    auto tile_idx_str = config_.get("debug.tile_idx.value", &found);
+    all_found &= found;
+    auto cell_idx_str = config_.get("debug.cell_idx.value", &found);
+    all_found &= found;
+    auto range_idx_str = config_.get("debug.range_idx.value", &found);
+    all_found &= found;
+
+    search_frag_idx_ = std::numeric_limits<uint64_t>::max();
+    search_tile_idx_ = std::numeric_limits<uint64_t>::max();
+    search_cell_idx_ = std::numeric_limits<uint64_t>::max();
+    search_range_idx_ = std::numeric_limits<uint64_t>::max();
+
+    if (all_found) {
+      RETURN_NOT_OK(utils::parse::convert(frag_idx_str, &search_frag_idx_));
+      RETURN_NOT_OK(utils::parse::convert(tile_idx_str, &search_tile_idx_));
+      RETURN_NOT_OK(utils::parse::convert(cell_idx_str, &search_cell_idx_));
+      RETURN_NOT_OK(utils::parse::convert(range_idx_str, &search_range_idx_));
+    }
+
     // Load as many tiles as the memory budget allows.
     bool budget_exceeded = false;
     unsigned int f = 0;
@@ -474,6 +497,9 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
           }
 
           for (uint64_t t = start; t <= range_it->second; t++) {
+            if (f == search_frag_idx_ && t == search_tile_idx_) {
+              std::cout << "Adding result tile for searched value...\n";
+            }
             RETURN_NOT_OK(add_result_tile(
                 dim_num,
                 memory_budget_result_tiles,
@@ -633,6 +659,18 @@ Status SparseUnorderedWithDupsReader::create_result_cell_slabs(
   std::vector<std::vector<uint64_t>> coord_tiles_result_counts(dim_num);
   std::vector<std::atomic<uint64_t>> full_overlap_count(dim_num);
 
+  bool found = true;
+  std::vector<std::string> search_value(dim_num);
+  for (unsigned d = 0; d < dim_num; d++) {
+    bool f = false;
+    search_value[d] = config_.get("debug.dim." + dim_names_[d] + ".value", &f);
+    found &= f;
+  }
+
+  if (found) {
+    std::cout << "Found debug value, looking in bitmaps...\n";
+  }
+
   auto rt = result_tiles_.begin();
   while (rt != result_tiles_.end()) {
     bool tile_used = false;
@@ -709,6 +747,120 @@ Status SparseUnorderedWithDupsReader::create_result_cell_slabs(
         prev_dim = dim_idx;
       }
 
+      if (found) {
+        for (uint64_t pos = 0; pos < rt->cell_num(); pos++) {
+          bool equal = true;
+          for (unsigned d = 0; d < dim_num; d++) {
+            if (is_dim_var_size_[d]) {
+              auto val = rt->coord_string(pos, d);
+              equal &= 0 == memcmp(
+                                val.c_str(),
+                                search_value[d].c_str(),
+                                search_value[d].length());
+            } else {
+              switch (array_schema_->dimension(d)->type()) {
+                case Datatype::INT8: {
+                  int64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (int64_t) * (int8_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::UINT8: {
+                  uint64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (uint64_t) * (uint8_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::INT16: {
+                  int64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (int64_t) * (int16_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::UINT16: {
+                  uint64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (uint64_t) * (uint16_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::INT32: {
+                  int64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (int64_t) * (int32_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::UINT32: {
+                  uint64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == (uint64_t) * (uint32_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::INT64: {
+                  int64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == *(int64_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::UINT64: {
+                  uint64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == *(uint64_t*)rt->coord(pos, d);
+                  break;
+                }
+                case Datatype::DATETIME_YEAR:
+                case Datatype::DATETIME_MONTH:
+                case Datatype::DATETIME_WEEK:
+                case Datatype::DATETIME_DAY:
+                case Datatype::DATETIME_HR:
+                case Datatype::DATETIME_MIN:
+                case Datatype::DATETIME_SEC:
+                case Datatype::DATETIME_MS:
+                case Datatype::DATETIME_US:
+                case Datatype::DATETIME_NS:
+                case Datatype::DATETIME_PS:
+                case Datatype::DATETIME_FS:
+                case Datatype::DATETIME_AS:
+                case Datatype::TIME_HR:
+                case Datatype::TIME_MIN:
+                case Datatype::TIME_SEC:
+                case Datatype::TIME_MS:
+                case Datatype::TIME_US:
+                case Datatype::TIME_NS:
+                case Datatype::TIME_PS:
+                case Datatype::TIME_FS:
+                case Datatype::TIME_AS: {
+                  int64_t val;
+                  RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                  equal &= val == *(int64_t*)rt->coord(pos, d);
+                  break;
+                }
+                default:
+                  equal = false;
+                  assert(false);
+              }
+            }
+          }
+
+          if (equal) {
+            uint64_t current_count = 1;
+            for (unsigned d = 0; d < dim_num; d++) {
+              current_count *=
+                  full_overlap_count[d] + coord_tiles_result_counts[d][pos];
+            }
+
+            std::cout << "Found value in (" << rt->frag_idx() << ","
+                      << rt->tile_idx() << "," << pos
+                      << ") count: " << current_count << "\n";
+            std::cout << "Counts: ";
+            for (unsigned d = 0; d < dim_num; d++) {
+              std::cout << "(" << full_overlap_count[d] << ","
+                        << coord_tiles_result_counts[d][pos] << ") ";
+            }
+            std::cout << "\n";
+          }
+        }
+      }
+
       // Process all cells, when there is a "hole" in the cell
       // contiguity, push a new cell slab.
       uint64_t start = 0;
@@ -719,6 +871,8 @@ Status SparseUnorderedWithDupsReader::create_result_cell_slabs(
         current_count *=
             full_overlap_count[d] + coord_tiles_result_counts[d][0];
       }
+
+      uint64_t current_size = read_state_.result_cell_slabs_.size();
 
       for (uint64_t c = 0; c < rt->cell_num(); c++) {
         uint64_t count = 1;
@@ -759,6 +913,114 @@ Status SparseUnorderedWithDupsReader::create_result_cell_slabs(
           memory_used_rcs_ += sizeof(ResultCellSlab);
         }
         tile_used = true;
+      }
+
+      if (found) {
+        for (uint64_t i = current_size;
+             i < read_state_.result_cell_slabs_.size();
+             i++) {
+          auto& rcs = read_state_.result_cell_slabs_[i];
+          for (uint64_t pos = rcs.start_; pos < rcs.start_ + rcs.length_;
+               pos++) {
+            bool equal = true;
+            for (unsigned d = 0; d < dim_num; d++) {
+              if (is_dim_var_size_[d]) {
+                auto val = rt->coord_string(pos, d);
+                equal &= 0 == memcmp(
+                                  val.c_str(),
+                                  search_value[d].c_str(),
+                                  search_value[d].length());
+              } else {
+                switch (array_schema_->dimension(d)->type()) {
+                  case Datatype::INT8: {
+                    int64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == (int64_t) * (int8_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::UINT8: {
+                    uint64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == (uint64_t) * (uint8_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::INT16: {
+                    int64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == (int64_t) * (int16_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::UINT16: {
+                    uint64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == (uint64_t) * (uint16_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::INT32: {
+                    int64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == (int64_t) * (int32_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::UINT32: {
+                    uint64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    auto coord = (uint64_t) * (uint32_t*)rt->coord(pos, d);
+                    equal &= val == coord;
+                    break;
+                  }
+                  case Datatype::INT64: {
+                    int64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == *(int64_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::UINT64: {
+                    uint64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == *(uint64_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  case Datatype::DATETIME_YEAR:
+                  case Datatype::DATETIME_MONTH:
+                  case Datatype::DATETIME_WEEK:
+                  case Datatype::DATETIME_DAY:
+                  case Datatype::DATETIME_HR:
+                  case Datatype::DATETIME_MIN:
+                  case Datatype::DATETIME_SEC:
+                  case Datatype::DATETIME_MS:
+                  case Datatype::DATETIME_US:
+                  case Datatype::DATETIME_NS:
+                  case Datatype::DATETIME_PS:
+                  case Datatype::DATETIME_FS:
+                  case Datatype::DATETIME_AS:
+                  case Datatype::TIME_HR:
+                  case Datatype::TIME_MIN:
+                  case Datatype::TIME_SEC:
+                  case Datatype::TIME_MS:
+                  case Datatype::TIME_US:
+                  case Datatype::TIME_NS:
+                  case Datatype::TIME_PS:
+                  case Datatype::TIME_FS:
+                  case Datatype::TIME_AS: {
+                    int64_t val;
+                    RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+                    equal &= val == *(int64_t*)rt->coord(pos, d);
+                    break;
+                  }
+                  default:
+                    equal = false;
+                    assert(false);
+                }
+              }
+            }
+
+            if (equal) {
+              std::cout << "Found value in rcs (" << rt->frag_idx() << ","
+                        << rt->tile_idx() << "," << pos << ")\n";
+            }
+          }
+        }
       }
 
       // Adjust result tile ranges.

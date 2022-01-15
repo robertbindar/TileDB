@@ -2117,6 +2117,7 @@ Status Subarray::precompute_tile_overlap(
 }
 
 Status Subarray::precompute_all_ranges_tile_overlap(
+    Config& config,
     ThreadPool* const compute_tp,
     std::vector<std::vector<std::pair<uint64_t, uint64_t>>>*
         result_tile_ranges) {
@@ -2133,6 +2134,30 @@ Status Subarray::precompute_all_ranges_tile_overlap(
 
   compute_range_offsets();
 
+  bool all_found = true;
+  bool found = false;
+  auto frag_idx_str = config.get("debug.frag_idx.value", &found);
+  all_found &= found;
+  auto tile_idx_str = config.get("debug.tile_idx.value", &found);
+  all_found &= found;
+  auto cell_idx_str = config.get("debug.cell_idx.value", &found);
+  all_found &= found;
+  auto range_idx_str = config.get("debug.range_idx.value", &found);
+  all_found &= found;
+
+  uint64_t search_frag_idx = std::numeric_limits<uint64_t>::max();
+  uint64_t search_tile_idx = std::numeric_limits<uint64_t>::max();
+  uint64_t search_cell_idx = std::numeric_limits<uint64_t>::max();
+  uint64_t search_range_idx = std::numeric_limits<uint64_t>::max();
+
+  if (all_found) {
+    std::cout << "Found tile search values, searching in overlap...\n";
+    RETURN_NOT_OK(utils::parse::convert(frag_idx_str, &search_frag_idx));
+    RETURN_NOT_OK(utils::parse::convert(tile_idx_str, &search_tile_idx));
+    RETURN_NOT_OK(utils::parse::convert(cell_idx_str, &search_cell_idx));
+    RETURN_NOT_OK(utils::parse::convert(range_idx_str, &search_range_idx));
+  }
+
   // Compute relevant fragments and load rtrees.
   ComputeRelevantFragmentsCtx relevant_fragment_ctx;
   ComputeRelevantTileOverlapCtx tile_overlap_ctx;
@@ -2144,6 +2169,12 @@ Status Subarray::precompute_all_ranges_tile_overlap(
   const auto num_threads = compute_tp->concurrency_level();
   ResourcePool<std::vector<std::vector<uint8_t>>> all_threads_tile_bitmaps(
       num_threads);
+
+  for (auto f : relevant_fragments_) {
+    if (search_frag_idx == f) {
+      std::cout << "Relevant fragment contains search fragment\n";
+    }
+  }
 
   // Run all fragments in parallel.
   auto status =
@@ -2182,13 +2213,30 @@ Status Subarray::precompute_all_ranges_tile_overlap(
                 const auto r_end =
                     std::min((t + 1) * ranges_per_thread - 1, range_num - 1);
                 for (uint64_t r = r_start; r <= r_end; ++r) {
+                  if (search_frag_idx == f && r == search_range_idx) {
+                    std::cout << "Bitmap value before dim " << d << ": "
+                              << (uint64_t)tile_bitmaps[d][search_tile_idx]
+                              << "\n";
+                  }
                   meta[f]->compute_tile_bitmap(
                       ranges_[d][r], d, &tile_bitmaps[d]);
+                  if (search_frag_idx == f && r == search_range_idx) {
+                    std::cout << "Bitmap value after dim " << d << ": "
+                              << (uint64_t)tile_bitmaps[d][search_tile_idx]
+                              << "\n";
+                  }
                 }
 
                 return Status::Ok();
               });
           RETURN_NOT_OK(status_ranges);
+        }
+
+        if (search_frag_idx == f) {
+          for (unsigned d = 0; d < dim_num; d++) {
+            std::cout << "Final tile bitmap value for dim " << d << ": "
+                      << (uint64_t)tile_bitmaps[0][search_tile_idx] << "\n";
+          }
         }
 
         // Go through the bitmaps in reverse, whenever there is a "hole" in tile
@@ -2216,6 +2264,12 @@ Status Subarray::precompute_all_ranges_tile_overlap(
         // Push the last result tile range.
         if (length != 0)
           result_tile_ranges->at(f).emplace_back(end + 1 - length, end);
+
+        for (auto& tr : result_tile_ranges->at(f)) {
+          if (tr.first >= search_tile_idx && tr.second <= search_tile_idx) {
+            std::cout << "Found tile in tile ranges\n";
+          }
+        }
 
         return Status::Ok();
       });

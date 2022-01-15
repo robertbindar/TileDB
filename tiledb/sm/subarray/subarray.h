@@ -307,6 +307,7 @@ class Subarray {
    * @param result_tile_ranges The resulting tile ranges.
    */
   Status precompute_all_ranges_tile_overlap(
+      Config& config,
       ThreadPool* const compute_tp,
       std::vector<std::vector<std::pair<uint64_t, uint64_t>>>*
           result_tile_ranges);

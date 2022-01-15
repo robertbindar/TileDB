@@ -404,6 +404,130 @@ Status Reader::compute_range_result_coords(
 
   RETURN_NOT_OK(status);
 
+  auto dim_num = array_schema_->dim_num();
+  bool found = true;
+  std::vector<std::string> search_value(dim_num);
+  std::vector<bool> var_size(dim_num);
+  std::vector<Datatype> types(dim_num);
+  for (unsigned d = 0; d < dim_num; d++) {
+    bool f = false;
+    var_size[d] = array_schema_->dimension(d)->var_size();
+    types[d] = array_schema_->dimension(d)->type();
+    search_value[d] = config_.get(
+        "debug.dim." + array_schema_->dimension(d)->name() + ".value", &f);
+    found &= f;
+  }
+
+  if (found) {
+    std::cout << "Found debug value, looking in result coords...\n";
+  }
+
+  for (uint64_t r = 0; r < range_result_coords->size(); r++) {
+    for (auto& coord : range_result_coords->at(r)) {
+      bool equal = true;
+      for (unsigned d = 0; d < dim_num; d++) {
+        if (var_size[d]) {
+          auto val = coord.coord_string(d);
+          equal &= 0 == memcmp(
+                            val.c_str(),
+                            search_value[d].c_str(),
+                            search_value[d].length());
+        } else {
+          switch (types[d]) {
+            case Datatype::INT8: {
+              int64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (int64_t) * (int8_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::UINT8: {
+              uint64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (uint64_t) * (uint8_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::INT16: {
+              int64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (int64_t) * (int16_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::UINT16: {
+              uint64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (uint64_t) * (uint16_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::INT32: {
+              int64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (int64_t) * (int32_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::UINT32: {
+              uint64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == (uint64_t) * (uint32_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::INT64: {
+              int64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == *(int64_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::UINT64: {
+              uint64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == *(uint64_t*)coord.coord(d);
+              break;
+            }
+            case Datatype::DATETIME_YEAR:
+            case Datatype::DATETIME_MONTH:
+            case Datatype::DATETIME_WEEK:
+            case Datatype::DATETIME_DAY:
+            case Datatype::DATETIME_HR:
+            case Datatype::DATETIME_MIN:
+            case Datatype::DATETIME_SEC:
+            case Datatype::DATETIME_MS:
+            case Datatype::DATETIME_US:
+            case Datatype::DATETIME_NS:
+            case Datatype::DATETIME_PS:
+            case Datatype::DATETIME_FS:
+            case Datatype::DATETIME_AS:
+            case Datatype::TIME_HR:
+            case Datatype::TIME_MIN:
+            case Datatype::TIME_SEC:
+            case Datatype::TIME_MS:
+            case Datatype::TIME_US:
+            case Datatype::TIME_NS:
+            case Datatype::TIME_PS:
+            case Datatype::TIME_FS:
+            case Datatype::TIME_AS: {
+              int64_t val;
+              RETURN_NOT_OK(utils::parse::convert(search_value[d], &val));
+              equal &= val == *(int64_t*)coord.coord(d);
+              break;
+            }
+            default:
+              equal = false;
+              assert(false);
+          }
+        }
+      }
+
+      if (equal) {
+        std::cout << "Legacy found value in (" << coord.tile_->frag_idx() << ","
+                  << coord.tile_->tile_idx() << "," << coord.pos_ << "), range "
+                  << r << "\n";
+        std::cout << "Add debug.frag_idx.value=" << coord.tile_->frag_idx()
+                  << ",debug.tile_idx.value=" << coord.tile_->tile_idx()
+                  << ",debug.cell_idx.value=" << coord.pos_
+                  << ",debug.range_idx.value=" << r << " to configuration\n";
+      }
+    }
+  }
+
   return Status::Ok();
 }
 
