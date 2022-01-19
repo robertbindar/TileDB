@@ -504,6 +504,8 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
         }
         auto range_it = result_tile_ranges_[f].rbegin();
         while (range_it != result_tile_ranges_[f].rend()) {
+          std::cout << "tile range: (" << range_it->first << ","
+                    << range_it->second << ")\n";
           auto last_t = result_tile_ranges_[f].front().second;
 
           // Figure out the start index.
