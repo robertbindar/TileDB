@@ -2265,10 +2265,12 @@ Status Subarray::precompute_all_ranges_tile_overlap(
         if (length != 0)
           result_tile_ranges->at(f).emplace_back(end + 1 - length, end);
 
-        for (auto& tr : result_tile_ranges->at(f)) {
-          if (tr.first >= search_tile_idx && tr.second <= search_tile_idx) {
-            std::cout << "Found tile in tile ranges, num: "
-                      << result_tile_ranges->at(f).size() << "\n";
+        if (search_frag_idx == f) {
+          for (auto& tr : result_tile_ranges->at(f)) {
+            if (tr.first >= search_tile_idx && tr.second <= search_tile_idx) {
+              std::cout << "Found tile in tile ranges, num: "
+                        << result_tile_ranges->at(f).size() << "\n";
+            }
           }
         }
 

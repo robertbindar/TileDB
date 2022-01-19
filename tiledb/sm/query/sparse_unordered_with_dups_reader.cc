@@ -210,7 +210,6 @@ Status SparseUnorderedWithDupsReader::dowork() {
 
   // No more tiles to process, done.
   if (read_state_.result_cell_slabs_.empty()) {
-    read_state_.done_adding_result_tiles_ = true;
     zero_out_buffer_sizes();
     return Status::Ok();
   }
@@ -481,15 +480,6 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
       RETURN_NOT_OK(utils::parse::convert(range_idx_str, &search_range_idx_));
     }
 
-    std::cout << "create_result_tiles search value (" << search_frag_idx_ << ","
-              << search_tile_idx_ << "," << search_cell_idx_ << "), range "
-              << search_range_idx_ << "\n";
-
-    std::cout << "create_result_tiles result_tile_ranges_ size "
-              << result_tile_ranges_.size() << "\n";
-    std::cout << "create_result_tiles result_tile_ranges_ frag num "
-              << fragment_num << "\n";
-
     // Load as many tiles as the memory budget allows.
     bool budget_exceeded = false;
     unsigned int f = 0;
@@ -504,8 +494,6 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
         }
         auto range_it = result_tile_ranges_[f].rbegin();
         while (range_it != result_tile_ranges_[f].rend()) {
-          std::cout << "tile range: (" << range_it->first << ","
-                    << range_it->second << ")\n";
           auto last_t = result_tile_ranges_[f].front().second;
 
           // Figure out the start index.
