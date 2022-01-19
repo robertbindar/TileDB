@@ -481,11 +481,27 @@ Status SparseUnorderedWithDupsReader::create_result_tiles() {
       RETURN_NOT_OK(utils::parse::convert(range_idx_str, &search_range_idx_));
     }
 
+    std::cout << "create_result_tiles search value (" << search_frag_idx_ << ","
+              << search_tile_idx_ << "," << search_cell_idx_ << "), range "
+              << search_range_idx_ << "\n";
+
+    std::cout << "create_result_tiles result_tile_ranges_ size "
+              << result_tile_ranges_.size() << "\n";
+    std::cout << "create_result_tiles result_tile_ranges_ frag num "
+              << fragment_num << "\n";
+
     // Load as many tiles as the memory budget allows.
     bool budget_exceeded = false;
     unsigned int f = 0;
     while (f < fragment_num && !budget_exceeded) {
+      if (f == search_frag_idx_) {
+        std::cout << "processing searched fragment...\n";
+      }
       if (!all_tiles_loaded_[f]) {
+        if (f == search_frag_idx_) {
+          std::cout << "loading tile ranges for searched value..., num: "
+                    << result_tile_ranges_[f].size() << "\n";
+        }
         auto range_it = result_tile_ranges_[f].rbegin();
         while (range_it != result_tile_ranges_[f].rend()) {
           auto last_t = result_tile_ranges_[f].front().second;

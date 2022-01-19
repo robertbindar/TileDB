@@ -2267,7 +2267,8 @@ Status Subarray::precompute_all_ranges_tile_overlap(
 
         for (auto& tr : result_tile_ranges->at(f)) {
           if (tr.first >= search_tile_idx && tr.second <= search_tile_idx) {
-            std::cout << "Found tile in tile ranges\n";
+            std::cout << "Found tile in tile ranges, num: "
+                      << result_tile_ranges->at(f).size() << "\n";
           }
         }
 
