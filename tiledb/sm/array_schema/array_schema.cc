@@ -574,7 +574,7 @@ Status ArraySchema::deserialize(ConstBuffer* buff) {
   if (!st_coords_filters.ok()) {
     return Status_ArraySchemaError("Cannot deserialize coords filters");
   }
-  coords_filters_ = FilterPipeline(*coords_filters.value());
+  coords_filters_ = coords_filters.value();
 
   // Load offsets filters
   auto&& [st_cell_var_filters, cell_var_filters]{
@@ -582,7 +582,7 @@ Status ArraySchema::deserialize(ConstBuffer* buff) {
   if (!st_coords_filters.ok()) {
     return Status_ArraySchemaError("Cannot deserialize cell var filters");
   }
-  cell_var_offsets_filters_ = FilterPipeline(*cell_var_filters.value());
+  cell_var_offsets_filters_ = cell_var_filters.value();
 
   // Load validity filters
   if (version_ >= 7) {
@@ -592,7 +592,7 @@ Status ArraySchema::deserialize(ConstBuffer* buff) {
       return Status_ArraySchemaError(
           "Cannot deserialize cell validity filters");
     }
-    cell_validity_filters_ = FilterPipeline(*cell_validity_filters.value());
+    cell_validity_filters_ = cell_validity_filters.value();
   }
 
   // Load domain

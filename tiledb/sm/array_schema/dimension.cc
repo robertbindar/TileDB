@@ -216,7 +216,7 @@ std::tuple<Status, optional<std::shared_ptr<Dimension>>> Dimension::deserialize(
     if (!st_filterpipeline.ok()) {
       return {st_filterpipeline, nullopt};
     }
-    filter_pipeline = FilterPipeline(*filterpipeline.value());
+    filter_pipeline = filterpipeline.value();
   } else {
     datatype = type;
     cell_val_num = (datatype_is_string(datatype)) ? constants::var_num : 1;

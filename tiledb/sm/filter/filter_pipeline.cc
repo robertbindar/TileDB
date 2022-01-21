@@ -497,21 +497,16 @@ Status FilterPipeline::serialize(Buffer* buff) const {
   return Status::Ok();
 }
 
-std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>>
-FilterPipeline::deserialize(ConstBuffer* buff) {
+std::tuple<Status, optional<FilterPipeline>> FilterPipeline::deserialize(
+    ConstBuffer* buff) {
   Status st;
   uint32_t max_chunk_size;
   std::vector<std::shared_ptr<Filter>> filters;
 
-  st = buff->read(&max_chunk_size, sizeof(uint32_t));
-  if (!st.ok()) {
-    return {st, nullopt};
-  }
+  RETURN_NOT_OK_TUPLE(buff->read(&max_chunk_size, sizeof(uint32_t)), nullopt);
+
   uint32_t num_filters;
-  st = buff->read(&num_filters, sizeof(uint32_t));
-  if (!st.ok()) {
-    return {st, nullopt};
-  }
+  RETURN_NOT_OK_TUPLE(buff->read(&num_filters, sizeof(uint32_t)), nullopt);
 
   for (uint32_t i = 0; i < num_filters; i++) {
     auto&& [st_filter, filter]{FilterCreate::deserialize(buff)};
@@ -521,9 +516,9 @@ FilterPipeline::deserialize(ConstBuffer* buff) {
     filters.push_back(std::move(filter.value()));
   }
 
-  return {Status::Ok(),
-          tiledb::common::make_shared<FilterPipeline>(
-              HERE(), max_chunk_size, filters)};
+  return {
+      Status::Ok(),
+      std::optional<FilterPipeline>(std::in_place, max_chunk_size, filters)};
 }
 
 void FilterPipeline::dump(FILE* out) const {

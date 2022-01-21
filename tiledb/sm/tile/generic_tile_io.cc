@@ -151,7 +151,7 @@ Status GenericTileIO::read_generic_tile_header(
   if (!st_filterpipeline.ok()) {
     return st_filterpipeline;
   }
-  header->filters = FilterPipeline(*filterpipeline.value());
+  header->filters = filterpipeline.value();
 
   return Status::Ok();
 }

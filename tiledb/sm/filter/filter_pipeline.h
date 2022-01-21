@@ -103,8 +103,8 @@ class FilterPipeline {
    * @param buff The buffer to deserialize from.
    * @return Status and FilterPipeline
    */
-  static std::tuple<Status, optional<std::shared_ptr<FilterPipeline>>>
-  deserialize(ConstBuffer* buff);
+  static std::tuple<Status, optional<FilterPipeline>> deserialize(
+      ConstBuffer* buff);
 
   /**
    * Dumps the filter pipeline details in ASCII format in the selected

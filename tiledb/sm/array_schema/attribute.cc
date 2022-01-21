@@ -172,7 +172,7 @@ std::tuple<Status, std::optional<Attribute>> Attribute::deserialize(
               datatype,
               nullable,
               cell_val_num,
-              *filterpipeline.value(),
+              filterpipeline.value(),
               fill_value,
               fill_value_validity)};
 }
