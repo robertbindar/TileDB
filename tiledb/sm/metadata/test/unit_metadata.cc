@@ -55,7 +55,7 @@ TEST_CASE(
   // key1:a, value1:100,200
   std::string key1 = "key1";
   uint32_t key1_size = static_cast<uint32_t>(key1.size());
-  uint32_t value1_size = 2;
+  std::vector<int> value1_vector{100, 200};
 
   // key2:key1, value2:1.1(double)
   std::string key2 = "key2";
@@ -75,11 +75,11 @@ TEST_CASE(
   buffer_metadata<uint32_t, 0>(p1) = static_cast<uint32_t>(key1.size());
   std::memcpy(&buffer_metadata<char, 4>(p1), key1.c_str(), key1_size);
   buffer_metadata<char, 8>(p1) = 0;
-  buffer_metadata<char, 9>(p1) = (char)Datatype::INT32;
-  buffer_metadata<uint32_t, 10>(p1) = value1_size;
-  buffer_metadata<int32_t, 14>(p1) = 100;
-  buffer_metadata<int32_t, 18>(p1) = 200;
-  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+  buffer_metadata<char, 9>(p1) = static_cast<char>(Datatype::INT32);
+  buffer_metadata<uint32_t, 10>(p1) = (uint32_t)value1_vector.size();
+  buffer_metadata<int32_t, 14>(p1) = value1_vector[0];
+  buffer_metadata<int32_t, 18>(p1) = value1_vector[1];
+  metadata_buffs.push_back(make_shared<Buffer>(
       HERE(), &serialized_buffer1, sizeof(serialized_buffer1)));
 
   char serialized_buffer2[22];
@@ -91,7 +91,7 @@ TEST_CASE(
   buffer_metadata<char, 9>(p2) = (char)Datatype::FLOAT64;
   buffer_metadata<uint32_t, 10>(p2) = value2_size;
   buffer_metadata<double, 14>(p2) = value2;
-  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+  metadata_buffs.push_back(make_shared<Buffer>(
       HERE(), &serialized_buffer2, sizeof(serialized_buffer2)));
 
   char serialized_buffer3[25];
@@ -103,38 +103,35 @@ TEST_CASE(
   buffer_metadata<char, 9>(p3) = (char)Datatype::STRING_ASCII;
   buffer_metadata<uint32_t, 10>(p3) = value3_size;
   std::memcpy(&buffer_metadata<char, 14>(p3), value3.c_str(), value3_size);
-  metadata_buffs.push_back(tiledb::common::make_shared<Buffer>(
+  metadata_buffs.push_back(make_shared<Buffer>(
       HERE(), &serialized_buffer3, sizeof(serialized_buffer3)));
 
   auto&& [st_meta, meta]{Metadata::deserialize(metadata_buffs)};
 
   REQUIRE(st_meta.ok());
 
+  Datatype type;
+  uint32_t v_num;
+
   // Read key1 metadata
-  const void* v1;
-  Datatype type1;
-  uint32_t v_num1;
-  meta.value()->get("key1", &type1, &v_num1, &v1);
-  CHECK(type1 == Datatype::INT32);
-  CHECK(v_num1 == value1_size);
-  CHECK(*((const int32_t*)v1) == 100);
-  CHECK(*((const int32_t*)v1 + 1) == 200);
+  const int32_t* v1;
+  meta.value()->get("key1", &type, &v_num, &v1);
+  CHECK(type == Datatype::INT32);
+  CHECK(v_num == (uint32_t)(value1_vector.size()));
+  CHECK(*(v1) == 100);
+  CHECK(*(v1 + 1) == 200);
 
   // Read key2 metadata
-  const void* v2;
-  Datatype type2;
-  uint32_t v_num2;
-  meta.value()->get("key2", &type2, &v_num2, &v2);
-  CHECK(type2 == Datatype::FLOAT64);
-  CHECK(v_num2 == value2_size);
-  CHECK(*((const double*)v2) == value2);
+  const double* v2;
+  meta.value()->get("key2", &type, &v_num, &v2);
+  CHECK(type == Datatype::FLOAT64);
+  CHECK(v_num == value2_size);
+  CHECK(*(v2) == value2);
 
   // Read key3 metadata
-  const void* v3;
-  Datatype type3;
-  uint32_t v_num3;
-  meta.value()->get("key3", &type3, &v_num3, &v3);
-  CHECK(type3 == Datatype::STRING_ASCII);
-  CHECK(v_num3 == value3_size);
-  CHECK(std::string((const char*)v3) == value3);
+  const char* v3;
+  meta.value()->get("key3", &type, &v_num, &v3);
+  CHECK(type == Datatype::STRING_ASCII);
+  CHECK(v_num == value3_size);
+  CHECK(std::string(v3) == value3);
 }
