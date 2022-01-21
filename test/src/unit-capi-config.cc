@@ -257,7 +257,6 @@ void check_save_to_file() {
   ss << "sm.mem.reader.sparse_global_order.ratio_array_data 0.1\n";
   ss << "sm.mem.reader.sparse_global_order.ratio_coords 0.5\n";
   ss << "sm.mem.reader.sparse_global_order.ratio_query_condition 0.25\n";
-  ss << "sm.mem.reader.sparse_global_order.ratio_rcs 0.05\n";
   ss << "sm.mem.reader.sparse_global_order.ratio_tile_ranges 0.1\n";
   ss << "sm.mem.reader.sparse_unordered_with_dups.ratio_array_data 0.1\n";
   ss << "sm.mem.reader.sparse_unordered_with_dups.ratio_coords 0.5\n";
@@ -267,7 +266,7 @@ void check_save_to_file() {
   ss << "sm.mem.total_budget 10737418240\n";
   ss << "sm.memory_budget 5368709120\n";
   ss << "sm.memory_budget_var 10737418240\n";
-  ss << "sm.query.dense.reader legacy\n";
+  ss << "sm.query.dense.reader refactored\n";
   ss << "sm.query.sparse_global_order.reader legacy\n";
   ss << "sm.query.sparse_unordered_with_dups.reader refactored\n";
   ss << "sm.read_range_oob warn\n";
@@ -566,7 +565,7 @@ TEST_CASE("C API: Test config iter", "[capi][config]") {
   all_param_values["sm.skip_est_size_partitioning"] = "false";
   all_param_values["sm.memory_budget"] = "5368709120";
   all_param_values["sm.memory_budget_var"] = "10737418240";
-  all_param_values["sm.query.dense.reader"] = "legacy";
+  all_param_values["sm.query.dense.reader"] = "refactored";
   all_param_values["sm.query.sparse_global_order.reader"] = "legacy";
   all_param_values["sm.query.sparse_unordered_with_dups.reader"] = "refactored";
   all_param_values["sm.mem.malloc_trim"] = "true";
@@ -578,7 +577,6 @@ TEST_CASE("C API: Test config iter", "[capi][config]") {
       "0.1";
   all_param_values["sm.mem.reader.sparse_global_order.ratio_array_data"] =
       "0.1";
-  all_param_values["sm.mem.reader.sparse_global_order.ratio_rcs"] = "0.05";
   all_param_values["sm.mem.reader.sparse_unordered_with_dups.ratio_coords"] =
       "0.5";
   all_param_values
