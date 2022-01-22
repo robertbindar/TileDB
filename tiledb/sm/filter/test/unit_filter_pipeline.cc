@@ -105,19 +105,19 @@ TEST_CASE(
   auto&& [st_filters, filters]{FilterPipeline::deserialize(&constbuffer)};
   REQUIRE(st_filters.ok());
 
-  CHECK(filters.value()->max_chunk_size() == max_chunk_size);
-  CHECK(filters.value()->size() == num_filters);
+  CHECK(filters.value().max_chunk_size() == max_chunk_size);
+  CHECK(filters.value().size() == num_filters);
 
-  Filter* filter1 = filters.value()->get_filter(0);
+  Filter* filter1 = filters.value().get_filter(0);
   CHECK(filter1->type() == filtertype1);
   int level1 = 0;
   REQUIRE(filter1->get_option(FilterOption::COMPRESSION_LEVEL, &level1).ok());
   CHECK(level1 == compressor_level1);
 
-  Filter* filter2 = filters.value()->get_filter(1);
+  Filter* filter2 = filters.value().get_filter(1);
   CHECK(filter2->type() == filtertype2);
 
-  Filter* filter3 = filters.value()->get_filter(2);
+  Filter* filter3 = filters.value().get_filter(2);
   CHECK(filter3->type() == filtertype3);
   int level3 = 0;
   REQUIRE(filter3->get_option(FilterOption::COMPRESSION_LEVEL, &level3).ok());
