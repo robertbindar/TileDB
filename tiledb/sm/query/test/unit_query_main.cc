@@ -1,5 +1,5 @@
 /**
- * @file tiledb/common/thread_pool/test/main.cc
+ * @file unit_query_main.cc
  *
  * @section LICENSE
  *

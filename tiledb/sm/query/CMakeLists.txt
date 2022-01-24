@@ -28,16 +28,20 @@ include(common NO_POLICY_SCOPE)
 
 # Skeleton for future use
 if (FALSE AND TILEDB_TESTS)
-    add_executable(unit_query_writer EXCLUDE_FROM_ALL)
+    add_executable(unit_query EXCLUDE_FROM_ALL)
     find_package(Catch_EP REQUIRED)
-    target_link_libraries(unit_query_writer PUBLIC Catch2::Catch2)
+    target_link_libraries(unit_query PUBLIC Catch2::Catch2)
 
     # Sources for tests
-    target_sources(unit_query_writer PUBLIC test/unit_query_writer_main.cc)
+    target_sources(unit_query PUBLIC 
+        test/unit_query_main.cc
+        test/unit_sparse_global_order_reader.cc
+        test/unit_sparse_unordered_with_dups_reader.cc
+    )
 
     add_test(
-        NAME "unit_query_writer"
-        COMMAND $<TARGET_FILE:unit_query_writer>
+        NAME "unit_query"
+        COMMAND $<TARGET_FILE:unit_query>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
