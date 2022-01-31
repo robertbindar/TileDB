@@ -50,15 +50,15 @@ namespace sm {
 /* ********************************* */
 
 Metadata::Metadata()
-    : timestamp_range_([]() -> std::pair<uint64_t, uint64_t> {
-      auto t = utils::time::timestamp_now_ms();
-      return std::make_pair(t, t);
-    }()) {
+    : Metadata(std::map<std::string, MetadataValue>()) {
 }
 
 Metadata::Metadata(const std::map<std::string, MetadataValue>& metadata_map)
-    : Metadata() {
-  metadata_map_ = metadata_map;
+    : metadata_map_(metadata_map)
+    , timestamp_range_([]() -> std::pair<uint64_t, uint64_t> {
+      auto t = utils::time::timestamp_now_ms();
+      return std::make_pair(t, t);
+    }()) {
   build_metadata_index();
 }
 
@@ -115,7 +115,7 @@ Status Metadata::generate_uri(const URI& array_uri) {
   return Status::Ok();
 }
 
-std::tuple<Status, optional<std::shared_ptr<Metadata>>> Metadata::deserialize(
+tuple<Status, optional<shared_ptr<Metadata>>> Metadata::deserialize(
     const std::vector<tdb_shared_ptr<Buffer>>& metadata_buffs) {
   std::map<std::string, MetadataValue> metadata_map;
   if (metadata_buffs.empty())
@@ -129,16 +129,10 @@ std::tuple<Status, optional<std::shared_ptr<Metadata>>> Metadata::deserialize(
     // Iterate over all items
     buff->reset_offset();
     while (buff->offset() != buff->size()) {
-      st = buff->read(&key_len, sizeof(uint32_t));
-      if (!st.ok()) {
-        return {st, nullopt};
-      }
+      RETURN_NOT_OK_TUPLE(buff->read(&key_len, sizeof(uint32_t)), nullopt);
       std::string key((const char*)buff->cur_data(), key_len);
       buff->advance_offset(key_len);
-      st = buff->read(&del, sizeof(char));
-      if (!st.ok()) {
-        return {st, nullopt};
-      }
+      RETURN_NOT_OK_TUPLE(buff->read(&del, sizeof(char)), nullopt);
 
       metadata_map.erase(key);
 
@@ -148,22 +142,17 @@ std::tuple<Status, optional<std::shared_ptr<Metadata>>> Metadata::deserialize(
 
       MetadataValue value_struct;
       value_struct.del_ = del;
-      st = buff->read(&value_struct.type_, sizeof(char));
-      if (!st.ok()) {
-        return {st, nullopt};
-      }
-      st = buff->read(&value_struct.num_, sizeof(uint32_t));
-      if (!st.ok()) {
-        return {st, nullopt};
-      }
+      RETURN_NOT_OK_TUPLE(
+          buff->read(&value_struct.type_, sizeof(char)), nullopt);
+      RETURN_NOT_OK_TUPLE(
+          buff->read(&value_struct.num_, sizeof(uint32_t)), nullopt);
+
       if (value_struct.num_) {
         value_len = value_struct.num_ *
                     datatype_size(static_cast<Datatype>(value_struct.type_));
         value_struct.value_.resize(value_len);
-        st = buff->read((void*)value_struct.value_.data(), value_len);
-        if (!st.ok()) {
-          return {st, nullopt};
-        }
+        RETURN_NOT_OK_TUPLE(
+            buff->read((void*)value_struct.value_.data(), value_len), nullopt);
       }
 
       // Insert to metadata
