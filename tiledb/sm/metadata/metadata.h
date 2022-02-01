@@ -157,10 +157,10 @@ class Metadata {
    * Gets a metadata item as a key-value pair.
    *
    * @param key The metadata key.
-   * @param value_type The datatype of the value.
-   * @param value_num The number of items in the value part (they could be more
-   * than one).
-   * @param value The metadata value. It will be `nullptr` if the key does
+   * @param[out] value_type The datatype of the value.
+   * @param[out] value_num The number of items in the value part (they could be
+   * more than one).
+   * @param[out] value The metadata value. It will be `nullptr` if the key does
    *     not exist
    * @return Status
    */
@@ -174,12 +174,12 @@ class Metadata {
    * Gets a metadata item as a key-value pair using an index.
    *
    * @param index The index used to retrieve the metadata.
-   * @param key The metadata key.
-   * @param key_len The metadata key length.
-   * @param value_type The datatype of the value.
-   * @param value_num The number of items in the value part (they could be more
-   * than one).
-   * @param value The metadata value. It will be `nullptr` if the key does
+   * @param[out] key The metadata key.
+   * @param[out] key_len The metadata key length.
+   * @param[out] value_type The datatype of the value.
+   * @param[out] value_num The number of items in the value part (they could be
+   * more than one).
+   * @param[out] value The metadata value. It will be `nullptr` if the key does
    *     not exist
    * @return Status
    */

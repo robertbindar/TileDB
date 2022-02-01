@@ -114,24 +114,24 @@ TEST_CASE(
   uint32_t v_num;
 
   // Read key1 metadata
-  const void* v1;
-  meta.value()->get("key1", &type, &v_num, &v1);
+  const int32_t* v1;
+  meta.value()->get("key1", &type, &v_num, (const void**)(&v1));
   CHECK(type == Datatype::INT32);
   CHECK(v_num == (uint32_t)(value1_vector.size()));
-  CHECK(*((const int32_t*)v1) == 100);
-  CHECK(*((const int32_t*)v1 + 1) == 200);
+  CHECK(*(v1) == 100);
+  CHECK(*(v1 + 1) == 200);
 
   // Read key2 metadata
-  const void* v2;
-  meta.value()->get("key2", &type, &v_num, &v2);
+  const double* v2;
+  meta.value()->get("key2", &type, &v_num, (const void**)(&v2));
   CHECK(type == Datatype::FLOAT64);
   CHECK(v_num == value2_size);
-  CHECK(*((const double*)v2) == value2);
+  CHECK(*(v2) == value2);
 
   // Read key3 metadata
-  const void* v3;
-  meta.value()->get("key3", &type, &v_num, &v3);
+  const char* v3;
+  meta.value()->get("key3", &type, &v_num, (const void**)(&v3));
   CHECK(type == Datatype::STRING_ASCII);
   CHECK(v_num == value3_size);
-  CHECK(std::string((const char*)v3) == value3);
+  CHECK(std::string(v3) == value3);
 }
