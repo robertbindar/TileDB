@@ -43,6 +43,7 @@
 #include "tiledb/sm/misc/tile_overlap.h"
 #include "tiledb/sm/misc/types.h"
 #include "tiledb/sm/stats/stats.h"
+#include "tiledb/sm/subarray/range_manager.h"
 #include "tiledb/sm/subarray/subarray_tile_overlap.h"
 
 #include <cmath>
@@ -1045,6 +1046,12 @@ class Subarray {
 
   /** Stores a vector of 1D ranges per dimension. */
   std::vector<std::vector<Range>> ranges_;
+
+  /**
+   * Stores a vector of RangeManager objects, one per dimension, for handling
+   * operations on ranges.
+   */
+  std::vector<tdb_shared_ptr<RangeManager>> range_managers_;
 
   /**
    * One value per dimension indicating whether the (single) range set in

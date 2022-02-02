@@ -36,6 +36,7 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "tiledb/common/heap_memory.h"
 #include "tiledb/common/logger.h"
 #include "tiledb/sm/array/array.h"
 #include "tiledb/sm/array_schema/array_schema.h"
@@ -2052,9 +2053,13 @@ void Subarray::add_default_ranges() {
   auto domain = array_schema->domain()->domain();
 
   ranges_.resize(dim_num);
+  range_managers_.clear();
+  range_managers_.resize(dim_num);
   is_default_.resize(dim_num, true);
-  for (unsigned d = 0; d < dim_num; ++d)
-    ranges_[d].emplace_back(domain[d]);
+  for (unsigned d = 0; d < dim_num; ++d) {
+    range_managers_.push_back(create_range_manager(
+        array_schema->dimension(d)->type(), d, domain[d], ranges_));
+  }
 }
 
 void Subarray::compute_range_offsets() {
