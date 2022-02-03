@@ -1,9 +1,9 @@
 #
-# tiledb/sm/CMakeLists.txt
+# tiledb/sm/subarray/CMakeLists.txt
 #
 # The MIT License
 #
-# Copyright (c) 2021 TileDB, Inc.
+# Copyright (c) 2022 TileDB, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,18 +24,23 @@
 # THE SOFTWARE.
 #
 
-include(common-root)
+include(common NO_POLICY_SCOPE)
 
-add_subdirectory(array_schema)
-add_subdirectory(buffer)
-add_subdirectory(compressors)
-add_subdirectory(config)
-add_subdirectory(crypto)
-add_subdirectory(filesystem)
-add_subdirectory(filter)
-add_subdirectory(metadata)
-add_subdirectory(misc)
-add_subdirectory(query)
-add_subdirectory(stats)
-add_subdirectory(subarray)
-add_subdirectory(tile)
+#
+# `range_manager` object library
+#
+add_library(range_manager OBJECT range_manager.cc)
+target_link_libraries(range_manager PUBLIC baseline $<TARGET_OBJECTS:baseline>)
+target_link_libraries(range_manager PUBLIC misc_types $<TARGET_OBJECTS:misc_types>)
+target_link_libraries(range_manager PUBLIC constants $<TARGET_OBJECTS:constants>)
+
+#
+# Test-compile of object library ensures link-completeness
+#
+add_executable(compile_range_manager EXCLUDE_FROM_ALL)
+target_link_libraries(compile_range_manager PRIVATE range_manager)
+target_sources(compile_range_manager PRIVATE test/compile_range_manager_main.cc)
+
+if (TILEDB_TESTS)
+    add_subdirectory(test)
+endif()
