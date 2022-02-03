@@ -38,6 +38,7 @@
 #include "tiledb/sm/misc/types.h"
 
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 using namespace tiledb::common;
@@ -54,15 +55,19 @@ struct AddRangeStrategy {
 };
 
 struct BasicAddStrategy : public AddRangeStrategy {
-  BasicAddStrategy() = default;
-  ~BasicAddStrategy() = default;
   void add_range(std::vector<Range>* const ranges, Range& new_range) override;
 };
 
-template <typename T>
+template <typename T, typename Enable = T>
 struct CoalescingAddStrategy : public AddRangeStrategy {
-  CoalescingAddStrategy() = default;
-  ~CoalescingAddStrategy() = default;
+  void add_range(std::vector<Range>* const ranges, Range& new_range) = 0;
+};
+
+template <typename T>
+struct CoalescingAddStrategy<
+    T,
+    typename std::enable_if<std::is_integral<T>::value, T>::type>
+    : public AddRangeStrategy {
   void add_range(std::vector<Range>* const ranges, Range& new_range) override {
     assert(!(ranges->empty()));
 
@@ -81,6 +86,24 @@ struct CoalescingAddStrategy : public AddRangeStrategy {
     } else {
       ranges->emplace_back(new_range);
     }
+  };
+};
+
+template <typename T>
+struct CoalescingAddStrategy<
+    T,
+    typename std::enable_if<std::is_floating_point<T>::value, T>::type>
+    : public AddRangeStrategy {
+  void add_range(std::vector<Range>* const ranges, Range& new_range) override {
+    ranges->emplace_back(new_range);
+  };
+};
+
+template <>
+struct CoalescingAddStrategy<std::string, std::string>
+    : public AddRangeStrategy {
+  void add_range(std::vector<Range>* const ranges, Range& new_range) override {
+    ranges->emplace_back(new_range);
   };
 };
 
@@ -156,16 +179,43 @@ class DimensionRangeManager : public RangeManager {
     ranges[dim_index].emplace_back(bounds);
   }
 
+  /**
+   * Constructor for the default RangeManager.
+   *
+   * This will create a new RangeManage and clear all existing data in the
+   * range.
+   */
+  DimensionRangeManager(
+      uint32_t dim_index,
+      Range& bounds,
+      std::vector<std::vector<Range>>& ranges,
+      bool allow_adding,
+      bool coalesce_ranges)
+      : bounds_(bounds)
+      , dim_index_(dim_index)
+      , is_default_(false) {
+    ranges[dim_index].clear();
+    if (allow_adding) {
+      if ((coalesce_ranges) && (std::is_integral<T>::value)) {
+        add_strategy_ = make_shared<detail::CoalescingAddStrategy<T>>(HERE());
+      } else {
+        add_strategy_ = make_shared<detail::BasicAddStrategy>(HERE());
+      }
+    }
+  };
+
   /** Destructor. */
   ~DimensionRangeManager() = default;
 
-  // //  Status add_range(std::vector<std::vector<Range>>& ranges, Range&&
-  // //  new_range, error_on_oob) {
-  // //    if (!error_on_oob)
-  // //      RETURN_NOT_OK(adjust_range_oob(&new_range));
-  // //    RETURN_NOT_OK(check_range(&new_range));
-  // //    add_range_unsafe(ranges, new_range);
-  // //  };
+  //  Status add_range(
+  //      std::vector<std::vector<Range>>& ranges,
+  //      Range&& new_range,
+  //      bool error_on_oob) {
+  //    if (!error_on_oob)
+  //      RETURN_NOT_OK(adjust_range_oob(&new_range));
+  //    RETURN_NOT_OK(check_range(&new_range));
+  //    add_range_unsafe(ranges, new_range);
+  //  };
 
   Status add_range_unsafe(
       std::vector<std::vector<Range>>& ranges, Range&& new_range) override {
@@ -227,6 +277,14 @@ tdb_shared_ptr<RangeManager> create_range_manager(
     uint32_t dim_index,
     Range& range_bounds,
     std::vector<std::vector<Range>>& ranges);
+
+tdb_shared_ptr<RangeManager> create_range_manager(
+    Datatype datatype,
+    uint32_t dim_index,
+    Range& range_bounds,
+    std::vector<std::vector<Range>>& ranges,
+    bool allow_adding,
+    bool coalesce_ranges);
 
 }  // namespace sm
 }  // namespace tiledb
