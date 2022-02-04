@@ -34,18 +34,15 @@
 #include "../range_manager.h"
 #include "tiledb/sm/misc/types.h"
 
+#include <vector>
+
 using namespace tiledb;
 using namespace tiledb::common;
 using namespace tiledb::sm;
 
-TEST_CASE("DimensionRangeManager::DimensionRangeManager,uint64") {
-  std::vector<std::vector<Range>> ranges;
-  ranges.resize(1);
-  Range range{0, 10};
-  uint32_t index = 0;
-  DimensionRangeManager<uint64_t> x{
-      index,
-      range,
-      ranges,
-  };
+TEST_CASE("DimensionRangeManager::DimensionRangeManager") {
+  std::vector<std::vector<Range>> ranges(1);
+  uint64_t bounds[2] = {0, 10};
+  Range range{bounds, 2 * sizeof(uint64_t)};
+  DimensionRangeManager<uint64_t> range_manager{0, range, ranges};
 }
