@@ -100,7 +100,7 @@ Subarray::Subarray(
     StorageManager* storage_manager)
     : stats_(
           parent_stats ? parent_stats->create_child("Subarray") :
-                         storage_manager ?
+          storage_manager ?
                          storage_manager->stats()->create_child("subSubarray") :
                          nullptr)
     , logger_(logger->clone("Subarray", ++logger_id_))
@@ -2057,7 +2057,7 @@ void Subarray::add_default_ranges() {
   range_managers_.resize(dim_num);
   is_default_.resize(dim_num, true);
   for (unsigned d = 0; d < dim_num; ++d) {
-    range_managers_.push_back(create_range_manager(
+    range_managers_.push_back(create_default_range_manager(
         array_schema->dimension(d)->type(), d, domain[d], ranges_));
   }
 }

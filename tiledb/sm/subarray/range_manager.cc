@@ -39,15 +39,15 @@ namespace sm {
 
 namespace detail {
 void BasicAddStrategy::add_range(
-    std::vector<Range>* const ranges, Range& new_range) {
+    std::vector<Range>* const ranges, const Range& new_range) {
   ranges->emplace_back(new_range);
 }
 }  // namespace detail
 
-tdb_shared_ptr<RangeManager> create_range_manager(
+tdb_shared_ptr<RangeManager> create_default_range_manager(
     Datatype datatype,
     uint32_t dim_index,
-    Range& range_bounds,
+    const Range& range_bounds,
     std::vector<std::vector<Range>>& ranges) {
   switch (datatype) {
     case Datatype::INT8:
@@ -127,7 +127,7 @@ tdb_shared_ptr<RangeManager> create_range_manager(
 tdb_shared_ptr<RangeManager> create_range_manager(
     Datatype datatype,
     uint32_t dim_index,
-    Range& range_bounds,
+    const Range& range_bounds,
     std::vector<std::vector<Range>>& ranges,
     bool allow_adding,
     bool coalesce_ranges) {
