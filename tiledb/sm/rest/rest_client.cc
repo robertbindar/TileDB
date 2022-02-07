@@ -35,6 +35,7 @@
 #include "tiledb/sm/serialization/capnp_utils.h"
 #include "tiledb/sm/serialization/array.h"
 #include "tiledb/sm/serialization/array_schema_evolution.h"
+#include "tiledb/sm/serialization/config.h"
 #include "tiledb/sm/serialization/query.h"
 #include "tiledb/sm/serialization/tiledb-rest.h"
 #include "tiledb/sm/rest/curl.h" // must be included last to avoid Windows.h
@@ -173,6 +174,45 @@ Status RestClient::post_array_schema_to_rest(
       &returned_data,
       cache_key);
   return sc;
+}
+
+Status RestClient::post_array_to_rest(const URI& uri, Array* array) {
+  Buffer buff;
+  BufferList serialized;
+  Config config = array->config();
+
+  RETURN_NOT_OK(serialization::config_serialize(
+      &config, serialization_type_, &buff, false));
+  RETURN_NOT_OK(serialized.add_buffer(std::move(buff)));
+
+  uint64_t timestamp_start = array->timestamp_start();
+  uint64_t timestamp_end = array->timestamp_end();
+
+  // Init curl and form the URL
+  Curl curlc;
+  std::string array_ns, array_uri;
+  RETURN_NOT_OK(uri.get_rest_components(&array_ns, &array_uri));
+  const std::string cache_key = array_ns + ":" + array_uri;
+  RETURN_NOT_OK(
+      curlc.init(&config, extra_headers_, &redirect_meta_, &redirect_mtx_));
+  auto deduced_url = redirect_uri(cache_key) + "/v2/arrays/" + array_ns + "/" +
+                     curlc.url_escape(array_uri) +
+                     "?start_timestamp=" + std::to_string(timestamp_start) +
+                     "&end_timestamp=" + std::to_string(timestamp_end);
+  Buffer returned_data;
+  RETURN_NOT_OK(curlc.post_data(
+      stats_,
+      deduced_url,
+      serialization_type_,
+      &serialized,
+      &returned_data,
+      cache_key));
+  if (returned_data.data() == nullptr || returned_data.size() == 0)
+    return LOG_STATUS(Status_RestError(
+        "Error getting array from REST; server returned no data."));
+
+  return serialization::array_deserialize(
+      array, serialization_type_, returned_data);
 }
 
 Status RestClient::deregister_array_from_rest(const URI& uri) {
@@ -842,6 +882,11 @@ Status RestClient::get_array_schema_from_rest(const URI&, ArraySchema**) {
 }
 
 Status RestClient::post_array_schema_to_rest(const URI&, ArraySchema*) {
+  return LOG_STATUS(
+      Status_RestError("Cannot use rest client; serialization not enabled."));
+}
+
+Status RestClient::post_array_to_rest(const URI&, Array*) {
   return LOG_STATUS(
       Status_RestError("Cannot use rest client; serialization not enabled."));
 }

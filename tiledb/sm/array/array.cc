@@ -168,8 +168,21 @@ Status Array::open_without_fragments(
     if (rest_client == nullptr)
       return LOG_STATUS(Status_ArrayError(
           "Cannot open array; remote array with no REST client."));
-    RETURN_NOT_OK(rest_client->get_array_schema_from_rest(
-        array_uri_, &array_schema_latest_));
+
+    bool optimized_array_open = false;
+    bool found = false;
+    RETURN_NOT_OK(config_.get<bool>(
+        "experimental.rest.optimized_array_open",
+        &optimized_array_open,
+        &found));
+    assert(found);
+
+    if (optimized_array_open) {
+      RETURN_NOT_OK(rest_client->post_array_to_rest(array_uri_, this));
+    } else {
+      RETURN_NOT_OK(rest_client->get_array_schema_from_rest(
+          array_uri_, &array_schema_latest_));
+    }
   } else {
     auto&& [st, array_schema, array_schemas] =
         storage_manager_->array_open_for_reads_without_fragments(this);
@@ -291,8 +304,21 @@ Status Array::open(
     if (rest_client == nullptr)
       return LOG_STATUS(Status_ArrayError(
           "Cannot open array; remote array with no REST client."));
-    RETURN_NOT_OK(rest_client->get_array_schema_from_rest(
-        array_uri_, &array_schema_latest_));
+
+    bool optimized_array_open = false;
+    bool found = false;
+    RETURN_NOT_OK(config_.get<bool>(
+        "experimental.rest.optimized_array_open",
+        &optimized_array_open,
+        &found));
+    assert(found);
+
+    if (optimized_array_open) {
+      RETURN_NOT_OK(rest_client->post_array_to_rest(array_uri_, this));
+    } else {
+      RETURN_NOT_OK(rest_client->get_array_schema_from_rest(
+          array_uri_, &array_schema_latest_));
+    }
   } else if (query_type == QueryType::READ) {
     auto&& [st, array_schema, array_schemas, fragment_metadata] =
         storage_manager_->array_open_for_reads(this);
