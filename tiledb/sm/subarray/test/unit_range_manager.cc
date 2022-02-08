@@ -34,15 +34,32 @@
 #include "../range_manager.h"
 #include "tiledb/sm/misc/types.h"
 
-#include <vector>
-
 using namespace tiledb;
 using namespace tiledb::common;
 using namespace tiledb::sm;
 
-TEST_CASE("DimensionRangeManager::DimensionRangeManager") {
-  std::vector<std::vector<Range>> ranges(1);
+TEST_CASE("CreateDefaultDimensionRangeManager") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  DimensionRangeManager<uint64_t> range_manager{0, range, ranges};
+  DimensionRangeManager<uint64_t> range_manager{range};
+  CHECK(range_manager.range_num() == 1);
+  Range default_range = range_manager.get_range(0);
+  CHECK(!default_range.empty());
+  const uint64_t* start = (uint64_t*)default_range.start();
+  const uint64_t* end = (uint64_t*)default_range.end();
+  CHECK(*start == 0);
+  CHECK(*end == 10);
+}
+
+TEST_CASE("CreateCoalescingRangeManager") {
+  uint64_t bounds[2] = {0, 10};
+  Range range{bounds, 2 * sizeof(uint64_t)};
+  DimensionRangeManager<uint64_t> range_manager{range};
+  CHECK(range_manager.range_num() == 1);
+  Range default_range = range_manager.get_range(0);
+  CHECK(!default_range.empty());
+  const uint64_t* start = (uint64_t*)default_range.start();
+  const uint64_t* end = (uint64_t*)default_range.end();
+  CHECK(*start == 0);
+  CHECK(*end == 10);
 }

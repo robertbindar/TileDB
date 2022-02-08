@@ -100,7 +100,7 @@ Subarray::Subarray(
     StorageManager* storage_manager)
     : stats_(
           parent_stats ? parent_stats->create_child("Subarray") :
-          storage_manager ?
+                         storage_manager ?
                          storage_manager->stats()->create_child("subSubarray") :
                          nullptr)
     , logger_(logger->clone("Subarray", ++logger_id_))
@@ -163,9 +163,14 @@ Status Subarray::add_range(
   tile_overlap_.clear();
 
   // Remove the default range
+  auto dim = array_->array_schema_latest()->dimension(dim_idx);
   if (is_default_[dim_idx]) {
-    ranges_[dim_idx].clear();
     is_default_[dim_idx] = false;
+    // TODO: Check the range manager is correctly set.
+    bool allow_adding = layout_ == Layout::GLOBAL_ORDER;
+    range_managers_.at(dim_idx) = create_range_manager(
+        dim->type(), dim->domain(), allow_adding, coalesce_ranges_);
+    ranges_[dim_idx].clear();
   }
 
   // Correctness checks
@@ -174,14 +179,13 @@ Status Subarray::add_range(
         "Cannot add more than one range per dimension to global order query"));
   }
 
-  auto dim = array_->array_schema_latest()->dimension(dim_idx);
   if (!read_range_oob_error)
     RETURN_NOT_OK(dim->adjust_range_oob(&range));
   RETURN_NOT_OK(dim->check_range(range));
 
   // Add the range
   add_or_coalesce_range_func_[dim_idx](this, dim_idx, range);
-
+  range_managers_[dim_idx]->add_range_unsafe(range);
   return Status::Ok();
 }
 
@@ -192,12 +196,17 @@ Status Subarray::add_range_unsafe(uint32_t dim_idx, const Range& range) {
 
   // Remove the default range
   if (is_default_[dim_idx]) {
-    ranges_[dim_idx].clear();
+    auto dim = array_->array_schema_latest()->dimension(dim_idx);
     is_default_[dim_idx] = false;
+    bool allow_adding = layout_ == Layout::GLOBAL_ORDER;
+    range_managers_.at(dim_idx) = create_range_manager(
+        dim->type(), dim->domain(), allow_adding, coalesce_ranges_);
+    ranges_[dim_idx].clear();
   }
 
   // Add the range
   add_or_coalesce_range_func_[dim_idx](this, dim_idx, range);
+  range_managers_[dim_idx]->add_range_unsafe(range);
 
   return Status::Ok();
 }
@@ -586,6 +595,7 @@ uint64_t Subarray::cell_num(const std::vector<uint64_t>& range_coords) const {
 void Subarray::clear() {
   ranges_.clear();
   range_offsets_.clear();
+  range_managers_.clear();
   est_result_size_computed_ = false;
   tile_overlap_.clear();
   add_or_coalesce_range_func_.clear();
@@ -1531,6 +1541,7 @@ const std::vector<Range>& Subarray::ranges_for_dim(uint32_t dim_idx) const {
 Status Subarray::set_ranges_for_dim(
     uint32_t dim_idx, const std::vector<Range>& ranges) {
   ranges_.resize(dim_idx + 1, std::vector<Range>());
+  range_managers_.resize(dim_idx + 1, nullptr);
 
   // Add each range individually so that contiguous
   // ranges may be coalesced.
@@ -2053,12 +2064,12 @@ void Subarray::add_default_ranges() {
   auto domain = array_schema->domain()->domain();
 
   ranges_.resize(dim_num);
-  range_managers_.clear();
-  range_managers_.resize(dim_num);
   is_default_.resize(dim_num, true);
+  range_managers_.clear();
   for (unsigned d = 0; d < dim_num; ++d) {
     range_managers_.push_back(create_default_range_manager(
-        array_schema->dimension(d)->type(), d, domain[d], ranges_));
+        array_schema->dimension(d)->type(), domain[d]));
+    ranges_[d].emplace_back(range_managers_[d]->get_range(0));
   }
 }
 
@@ -2681,6 +2692,7 @@ Subarray Subarray::clone() const {
   clone.layout_ = layout_;
   clone.cell_order_ = cell_order_;
   clone.ranges_ = ranges_;
+  clone.range_managers_ = range_managers_;
   clone.is_default_ = is_default_;
   clone.range_offsets_ = range_offsets_;
   clone.tile_overlap_ = tile_overlap_;
@@ -2828,6 +2840,7 @@ void Subarray::swap(Subarray& subarray) {
   std::swap(layout_, subarray.layout_);
   std::swap(cell_order_, subarray.cell_order_);
   std::swap(ranges_, subarray.ranges_);
+  std::swap(range_managers_, subarray.range_managers_);
   std::swap(is_default_, subarray.is_default_);
   std::swap(range_offsets_, subarray.range_offsets_);
   std::swap(tile_overlap_, subarray.tile_overlap_);

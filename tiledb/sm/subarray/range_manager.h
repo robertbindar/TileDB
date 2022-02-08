@@ -51,17 +51,16 @@ namespace detail {
 struct AddRangeStrategy {
   virtual ~AddRangeStrategy() = default;
   virtual void add_range(
-      std::vector<Range>* const ranges, const Range& new_range) = 0;
+      std::vector<Range>& ranges, const Range& new_range) = 0;
 };
 
 struct BasicAddStrategy : public AddRangeStrategy {
-  void add_range(
-      std::vector<Range>* const ranges, const Range& new_range) override;
+  void add_range(std::vector<Range>& ranges, const Range& new_range) override;
 };
 
 template <typename T, typename Enable = T>
 struct CoalescingAddStrategy : public AddRangeStrategy {
-  void add_range(std::vector<Range>* const ranges, const Range& new_range) = 0;
+  void add_range(std::vector<Range>& ranges, const Range& new_range) = 0;
 };
 
 template <typename T>
@@ -69,13 +68,12 @@ struct CoalescingAddStrategy<
     T,
     typename std::enable_if<std::is_integral<T>::value, T>::type>
     : public AddRangeStrategy {
-  void add_range(
-      std::vector<Range>* const ranges, const Range& new_range) override {
-    assert(!(ranges->empty()));
+  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
+    assert(!(ranges.empty()));
 
     // If the start index of `range` immediately follows the end of the
     // last range on `ranges`, they are contiguous and will be coalesced.
-    Range& last_range = ranges->back();
+    Range& last_range = ranges.back();
     const bool contiguous_after =
         *static_cast<const T*>(last_range.end()) !=
             std::numeric_limits<T>::max() &&
@@ -86,7 +84,7 @@ struct CoalescingAddStrategy<
     if (contiguous_after) {
       last_range.set_end(new_range.end());
     } else {
-      ranges->emplace_back(new_range);
+      ranges.emplace_back(new_range);
     }
   };
 };
@@ -96,18 +94,16 @@ struct CoalescingAddStrategy<
     T,
     typename std::enable_if<std::is_floating_point<T>::value, T>::type>
     : public AddRangeStrategy {
-  void add_range(
-      std::vector<Range>* const ranges, const Range& new_range) override {
-    ranges->emplace_back(new_range);
+  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
+    ranges.emplace_back(new_range);
   };
 };
 
 template <>
 struct CoalescingAddStrategy<std::string, std::string>
     : public AddRangeStrategy {
-  void add_range(
-      std::vector<Range>* const ranges, const Range& new_range) override {
-    ranges->emplace_back(new_range);
+  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
+    ranges.emplace_back(new_range);
   };
 };
 
@@ -142,8 +138,11 @@ class RangeManager {
    refactor).
    * @param new_range The range to add.
    */
-  virtual Status add_range_unsafe(
-      std::vector<std::vector<Range>>& ranges, const Range& new_range) = 0;
+  virtual Status add_range_unsafe(const Range& range) = 0;
+
+  virtual Range get_range(const uint64_t range_index) const = 0;
+
+  virtual std::vector<Range> get_ranges() const = 0;
 
   /**
    * Returns ``true`` if the current range is the default range.
@@ -153,8 +152,10 @@ class RangeManager {
    **/
   virtual bool is_default() const = 0;
 
-  /** Returns ``true`` if the current range manager is for a dimension label.*/
-  virtual bool is_label_manager() const = 0;
+  /**
+   * Returns the number of distinct ranges stored in the range manager.
+   */
+  virtual uint64_t range_num() const = 0;
 };
 
 template <typename T>
@@ -172,15 +173,11 @@ class DimensionRangeManager : public RangeManager {
    *
    * This will set the range to the full domain. No new ranges can be added.
    */
-  DimensionRangeManager(
-      uint32_t dim_index,
-      const Range& bounds,
-      std::vector<std::vector<Range>>& ranges)
+  DimensionRangeManager(const Range& bounds)
       : bounds_(bounds)
-      , dim_index_(dim_index)
-      , is_default_(true) {
-    ranges[dim_index].clear();
-    ranges[dim_index].emplace_back(bounds);
+      , is_default_(true)
+      , ranges_() {
+    ranges_.emplace_back(bounds);
   }
 
   /**
@@ -190,15 +187,10 @@ class DimensionRangeManager : public RangeManager {
    * range.
    */
   DimensionRangeManager(
-      uint32_t dim_index,
-      const Range& bounds,
-      std::vector<std::vector<Range>>& ranges,
-      bool allow_adding,
-      bool coalesce_ranges)
+      const Range& bounds, bool allow_adding, bool coalesce_ranges)
       : bounds_(bounds)
-      , dim_index_(dim_index)
-      , is_default_(false) {
-    ranges[dim_index].clear();
+      , is_default_(false)
+      , ranges_() {
     if (allow_adding) {
       if (coalesce_ranges) {
         add_strategy_ = make_shared<detail::CoalescingAddStrategy<T>>(HERE());
@@ -212,8 +204,7 @@ class DimensionRangeManager : public RangeManager {
   ~DimensionRangeManager() = default;
 
   //  Status add_range(
-  //      std::vector<std::vector<Range>>& ranges,
-  //      Range&& new_range,
+  //      Range&& range,
   //      bool error_on_oob) {
   //    if (!error_on_oob)
   //      RETURN_NOT_OK(adjust_range_oob(&new_range));
@@ -221,11 +212,9 @@ class DimensionRangeManager : public RangeManager {
   //    add_range_unsafe(ranges, new_range);
   //  };
 
-  Status add_range_unsafe(
-      std::vector<std::vector<Range>>& ranges,
-      const Range& new_range) override {
-    if (ranges[dim_index_].empty()) {
-      ranges[dim_index_].emplace_back(new_range);
+  Status add_range_unsafe(const Range& range) override {
+    if (ranges_.empty()) {
+      ranges_.emplace_back(range);
       return Status::Ok();
     }
     if (!add_strategy_) {
@@ -233,20 +222,28 @@ class DimensionRangeManager : public RangeManager {
       // matches the previous implementation, but it can lead to more than one
       // range per dimension for a subarray with global order or default range
       // (which is an unexpected state).
-      ranges[dim_index_].emplace_back(new_range);
+      ranges_.emplace_back(range);
       return Status::Ok();
     }
-    add_strategy_->add_range(&ranges[dim_index_], new_range);
+    add_strategy_->add_range(ranges_, range);
     return Status::Ok();
   }
+
+  Range get_range(const uint64_t range_index) const override {
+    return ranges_[range_index];
+  };
+
+  std::vector<Range> get_ranges() const override {
+    return ranges_;
+  };
 
   bool is_default() const override {
     return is_default_;
   };
 
-  bool is_label_manager() const override {
-    return label_name_.has_value();
-  };
+  uint64_t range_num() const override {
+    return ranges_.size();
+  }
 
  private:
   /* ********************************* */
@@ -255,15 +252,6 @@ class DimensionRangeManager : public RangeManager {
 
   /** Maximum possible range. */
   Range bounds_;
-
-  /** Dimension index of the dimension this is managing the range for. */
-  uint32_t dim_index_;
-
-  /**
-   * Label name this dimension of the dimension label this RangeManager is
-   * managing the
-   */
-  std::optional<std::string> label_name_ = std::nullopt;
 
   /**
    * If ``true``, the range contains the full domain for the dimension (the
@@ -274,20 +262,18 @@ class DimensionRangeManager : public RangeManager {
 
   /** Strategy for adding ranges. */
   tdb_shared_ptr<detail::AddRangeStrategy> add_strategy_;
+
+  /** Stored ranges. */
+  std::vector<Range> ranges_;
 };
 
 /* Create default RangeManager. */
 tdb_shared_ptr<RangeManager> create_default_range_manager(
-    Datatype datatype,
-    uint32_t dim_index,
-    const Range& range_bounds,
-    std::vector<std::vector<Range>>& ranges);
+    Datatype datatype, const Range& range_bounds);
 
 tdb_shared_ptr<RangeManager> create_range_manager(
     Datatype datatype,
-    uint32_t dim_index,
     const Range& range_bounds,
-    std::vector<std::vector<Range>>& ranges,
     bool allow_adding,
     bool coalesce_ranges);
 
