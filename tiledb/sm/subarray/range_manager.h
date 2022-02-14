@@ -140,9 +140,9 @@ class RangeManager {
    */
   virtual Status add_range_unsafe(const Range& range) = 0;
 
-  virtual Range get_range(const uint64_t range_index) const = 0;
+  virtual const Range& get_range(const uint64_t range_index) const = 0;
 
-  virtual std::vector<Range> get_ranges() const = 0;
+  virtual const std::vector<Range>& get_ranges() const = 0;
 
   /**
    * Returns ``true`` if the current range is the default range.
@@ -152,10 +152,14 @@ class RangeManager {
    **/
   virtual bool is_default() const = 0;
 
+  virtual bool is_empty() const = 0;
+
+  virtual bool is_unary() const = 0;
+
   /**
    * Returns the number of distinct ranges stored in the range manager.
    */
-  virtual uint64_t range_num() const = 0;
+  virtual uint64_t num_ranges() const = 0;
 };
 
 template <typename T>
@@ -229,11 +233,11 @@ class DimensionRangeManager : public RangeManager {
     return Status::Ok();
   }
 
-  Range get_range(const uint64_t range_index) const override {
+  const Range& get_range(const uint64_t range_index) const override {
     return ranges_[range_index];
   };
 
-  std::vector<Range> get_ranges() const override {
+  const std::vector<Range>& get_ranges() const override {
     return ranges_;
   };
 
@@ -241,9 +245,19 @@ class DimensionRangeManager : public RangeManager {
     return is_default_;
   };
 
-  uint64_t range_num() const override {
+  bool is_empty() const override {
+    return ranges_.empty();
+  };
+
+  bool is_unary() const override {
+    if (ranges_.size() != 1)
+      return false;
+    return ranges_[0].unary();
+  };
+
+  uint64_t num_ranges() const override {
     return ranges_.size();
-  }
+  };
 
  private:
   /* ********************************* */
