@@ -48,28 +48,26 @@ namespace sm {
 
 namespace detail {
 
-struct AddRangeStrategy {
-  virtual ~AddRangeStrategy() = default;
-  virtual void add_range(
-      std::vector<Range>& ranges, const Range& new_range) = 0;
+// Default add strategy: simple add.
+template <bool Coalesce, typename T, typename Enable = T>
+struct AddStrategy {
+  static Status add_range(std::vector<Range>& ranges, const Range& new_range) {
+    ranges.emplace_back(new_range);
+    return Status::Ok();
+  };
 };
 
-struct BasicAddStrategy : public AddRangeStrategy {
-  void add_range(std::vector<Range>& ranges, const Range& new_range) override;
-};
-
-template <typename T, typename Enable = T>
-struct CoalescingAddStrategy : public AddRangeStrategy {
-  void add_range(std::vector<Range>& ranges, const Range& new_range) = 0;
-};
-
+// Specialization for coalesing integer-type ranges.
 template <typename T>
-struct CoalescingAddStrategy<
+struct AddStrategy<
+    true,
     T,
-    typename std::enable_if<std::is_integral<T>::value, T>::type>
-    : public AddRangeStrategy {
-  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
-    assert(!(ranges.empty()));
+    typename std::enable_if<std::is_integral<T>::value, T>::type> {
+  static Status add_range(std::vector<Range>& ranges, const Range& new_range) {
+    if (ranges.empty()) {
+      ranges.emplace_back(new_range);
+      return Status::Ok();
+    }
 
     // If the start index of `range` immediately follows the end of the
     // last range on `ranges`, they are contiguous and will be coalesced.
@@ -86,24 +84,7 @@ struct CoalescingAddStrategy<
     } else {
       ranges.emplace_back(new_range);
     }
-  };
-};
-
-template <typename T>
-struct CoalescingAddStrategy<
-    T,
-    typename std::enable_if<std::is_floating_point<T>::value, T>::type>
-    : public AddRangeStrategy {
-  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
-    ranges.emplace_back(new_range);
-  };
-};
-
-template <>
-struct CoalescingAddStrategy<std::string, std::string>
-    : public AddRangeStrategy {
-  void add_range(std::vector<Range>& ranges, const Range& new_range) override {
-    ranges.emplace_back(new_range);
+    return Status::Ok();
   };
 };
 
@@ -162,13 +143,31 @@ class RangeManager {
   virtual uint64_t num_ranges() const = 0;
 };
 
-template <typename T>
+template <typename T, bool CoalesceAdds>
 class DimensionRangeManager : public RangeManager {
- public:
-  /* ********************************* */
-  /*     CONSTRUCTORS & DESTRUCTORS    */
-  /* ********************************* */
+ private:
+  using AddStrategy = detail::AddStrategy<CoalesceAdds, T>;
 
+  /** Maximum possible range. */
+  Range bounds_;
+
+  /**
+   * If ``true``, the range contains the full domain for the dimension (the
+   * default value for a subarray before any other values is set. Otherwise,
+   * some values has been explicitly set to the range.
+   */
+  bool is_default_ = true;
+
+  /**
+   * If ``true``, allow this to hold multiple ranges. If false, if can only be
+   * emply or have a single range.
+   */
+  bool allow_multiple_ranges_ = true;
+
+  /** Stored ranges. */
+  std::vector<Range> ranges_;
+
+ public:
   /** Disable default constructor. */
   DimensionRangeManager() = delete;
 
@@ -180,6 +179,7 @@ class DimensionRangeManager : public RangeManager {
   DimensionRangeManager(const Range& bounds)
       : bounds_(bounds)
       , is_default_(true)
+      , allow_multiple_ranges_(false)
       , ranges_() {
     ranges_.emplace_back(bounds);
   }
@@ -190,19 +190,11 @@ class DimensionRangeManager : public RangeManager {
    * This will create a new RangeManage and clear all existing data in the
    * range.
    */
-  DimensionRangeManager(
-      const Range& bounds, bool allow_adding, bool coalesce_ranges)
+  DimensionRangeManager(const Range& bounds, bool allow_multiple_ranges)
       : bounds_(bounds)
       , is_default_(false)
-      , ranges_() {
-    if (allow_adding) {
-      if (coalesce_ranges) {
-        add_strategy_ = make_shared<detail::CoalescingAddStrategy<T>>(HERE());
-      } else {
-        add_strategy_ = make_shared<detail::BasicAddStrategy>(HERE());
-      }
-    }
-  };
+      , allow_multiple_ranges_(allow_multiple_ranges)
+      , ranges_(){};
 
   /** Destructor. */
   ~DimensionRangeManager() = default;
@@ -217,20 +209,7 @@ class DimensionRangeManager : public RangeManager {
   //  };
 
   Status add_range_unsafe(const Range& range) override {
-    if (ranges_.empty()) {
-      ranges_.emplace_back(range);
-      return Status::Ok();
-    }
-    if (!add_strategy_) {
-      // TODO: This should be replaced with a failed status code. Right now it
-      // matches the previous implementation, but it can lead to more than one
-      // range per dimension for a subarray with global order or default range
-      // (which is an unexpected state).
-      ranges_.emplace_back(range);
-      return Status::Ok();
-    }
-    add_strategy_->add_range(ranges_, range);
-    return Status::Ok();
+    return AddStrategy::add_range(ranges_, range);
   }
 
   const Range& get_range(const uint64_t range_index) const override {
@@ -258,27 +237,18 @@ class DimensionRangeManager : public RangeManager {
   uint64_t num_ranges() const override {
     return ranges_.size();
   };
+};
 
- private:
-  /* ********************************* */
-  /*         PRIVATE ATTRIBUTES        */
-  /* ********************************* */
-
-  /** Maximum possible range. */
-  Range bounds_;
-
-  /**
-   * If ``true``, the range contains the full domain for the dimension (the
-   * default value for a subarray before any other values is set. Otherwise,
-   * some values has been explicitly set to the range.
-   */
-  bool is_default_ = true;
-
-  /** Strategy for adding ranges. */
-  tdb_shared_ptr<detail::AddRangeStrategy> add_strategy_;
-
-  /** Stored ranges. */
-  std::vector<Range> ranges_;
+template <typename T>
+tdb_shared_ptr<RangeManager> create_range_manager(
+    const Range& range_bounds,
+    bool allow_multiple_ranges,
+    bool coalesce_ranges) {
+  if (coalesce_ranges)
+    return make_shared<DimensionRangeManager<T, true>>(
+        HERE(), range_bounds, allow_multiple_ranges);
+  return make_shared<DimensionRangeManager<T, false>>(
+      HERE(), range_bounds, allow_multiple_ranges);
 };
 
 /* Create default RangeManager. */
