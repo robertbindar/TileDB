@@ -35,6 +35,7 @@
 
 #include "tiledb/common/heap_memory.h"
 #include "tiledb/sm/enums/datatype.h"
+#include "tiledb/sm/misc/parallel_functions.h"
 #include "tiledb/sm/misc/types.h"
 
 #include <optional>
@@ -84,6 +85,62 @@ struct AddStrategy<
     } else {
       ranges.emplace_back(new_range);
     }
+    return Status::Ok();
+  };
+};
+
+/**
+ * Sort algorithm for ranges.
+ *
+ * Default behavior: sorting is not enable.
+ */
+template <Datatype D, typename T, typename Enable = T>
+struct SortStrategy {
+  static Status sort(ThreadPool* const, std::vector<Range>&) {
+    return LOG_STATUS(Status_SubarrayError(
+        "Invalid datatype " + datatype_str(D) + " for sorting."));
+  };
+};
+
+template <Datatype D, typename T>
+struct SortStrategy<
+    D,
+    T,
+    typename std::enable_if<std::is_arithmetic<T>::value, T>::type> {
+  static Status sort(ThreadPool* const compute_tp, std::vector<Range>& ranges) {
+    parallel_sort(
+        compute_tp,
+        ranges.begin(),
+        ranges.end(),
+        [&](const Range& a, const Range& b) {
+          const T* a_data = static_cast<const T*>(a.start());
+          const T* b_data = static_cast<const T*>(b.start());
+          return a_data[0] < b_data[0] ||
+                 (a_data[0] == b_data[0] && a_data[1] < b_data[1]);
+        });
+    return Status::Ok();
+  };
+};
+
+template <Datatype D>
+struct SortStrategy<D, char, char> {
+  static Status sort(ThreadPool* const, std::vector<Range>&) {
+    return LOG_STATUS(Status_SubarrayError(
+        "Invalid datatype " + datatype_str(D) + " for sorting."));
+  };
+};
+
+template <>
+struct SortStrategy<Datatype::STRING_ASCII, std::string, std::string> {
+  static Status sort(ThreadPool* const compute_tp, std::vector<Range>& ranges) {
+    parallel_sort(
+        compute_tp,
+        ranges.begin(),
+        ranges.end(),
+        [&](const Range& a, const Range& b) {
+          return a.start_str() < b.start_str() ||
+                 (a.start_str() == b.start_str() && a.end_str() < b.end_str());
+        });
     return Status::Ok();
   };
 };
@@ -141,12 +198,20 @@ class RangeManager {
    * Returns the number of distinct ranges stored in the range manager.
    */
   virtual uint64_t num_ranges() const = 0;
+
+  /**
+   * Sorts the ranges in the range manager.
+   *
+   * @param compute_tp
+   */
+  virtual Status sort_ranges(ThreadPool* const compute_tp) = 0;
 };
 
 template <typename T, Datatype D, bool CoalesceAdds>
 class DimensionRangeManager : public RangeManager {
  private:
   using AddStrategy = detail::AddStrategy<CoalesceAdds, T>;
+  using SortStrategy = detail::SortStrategy<D, T>;
 
   /** Maximum possible range. */
   Range bounds_;
@@ -182,7 +247,7 @@ class DimensionRangeManager : public RangeManager {
       , allow_multiple_ranges_(false)
       , ranges_() {
     ranges_.emplace_back(bounds);
-  }
+  };
 
   /**
    * Constructor for the default RangeManager.
@@ -210,7 +275,7 @@ class DimensionRangeManager : public RangeManager {
 
   Status add_range_unsafe(const Range& range) override {
     return AddStrategy::add_range(ranges_, range);
-  }
+  };
 
   const Range& get_range(const uint64_t range_index) const override {
     return ranges_[range_index];
@@ -236,6 +301,10 @@ class DimensionRangeManager : public RangeManager {
 
   uint64_t num_ranges() const override {
     return ranges_.size();
+  };
+
+  Status sort_ranges(ThreadPool* const compute_tp) {
+    return SortStrategy::sort(compute_tp, ranges_);
   };
 };
 

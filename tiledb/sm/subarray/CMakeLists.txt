@@ -33,6 +33,7 @@ add_library(range_manager OBJECT range_manager.cc)
 target_link_libraries(range_manager PUBLIC baseline $<TARGET_OBJECTS:baseline>)
 target_link_libraries(range_manager PUBLIC misc_types $<TARGET_OBJECTS:misc_types>)
 target_link_libraries(range_manager PUBLIC constants $<TARGET_OBJECTS:constants>)
+target_link_libraries(range_manager PUBLIC thread_pool $<TARGET_OBJECTS:thread_pool>)
 
 #
 # Test-compile of object library ensures link-completeness
