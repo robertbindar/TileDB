@@ -303,7 +303,7 @@ class DimensionRangeManager : public RangeManager {
     return ranges_.size();
   };
 
-  Status sort_ranges(ThreadPool* const compute_tp) {
+  Status sort_ranges(ThreadPool* const compute_tp) override {
     return SortStrategy::sort(compute_tp, ranges_);
   };
 };
