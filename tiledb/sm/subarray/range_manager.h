@@ -143,7 +143,7 @@ class RangeManager {
   virtual uint64_t num_ranges() const = 0;
 };
 
-template <typename T, bool CoalesceAdds>
+template <typename T, Datatype D, bool CoalesceAdds>
 class DimensionRangeManager : public RangeManager {
  private:
   using AddStrategy = detail::AddStrategy<CoalesceAdds, T>;
@@ -239,19 +239,24 @@ class DimensionRangeManager : public RangeManager {
   };
 };
 
-template <typename T>
+template <typename T, Datatype D>
 tdb_shared_ptr<RangeManager> create_range_manager(
     const Range& range_bounds,
     bool allow_multiple_ranges,
     bool coalesce_ranges) {
   if (coalesce_ranges)
-    return make_shared<DimensionRangeManager<T, true>>(
+    return make_shared<DimensionRangeManager<T, D, true>>(
         HERE(), range_bounds, allow_multiple_ranges);
-  return make_shared<DimensionRangeManager<T, false>>(
+  return make_shared<DimensionRangeManager<T, D, false>>(
       HERE(), range_bounds, allow_multiple_ranges);
 };
 
-/* Create default RangeManager. */
+template <typename T, Datatype D>
+tdb_shared_ptr<RangeManager> create_default_range_manager(
+    const Range& range_bounds) {
+  return make_shared<DimensionRangeManager<T, D, false>>(HERE(), range_bounds);
+};
+
 tdb_shared_ptr<RangeManager> create_default_range_manager(
     Datatype datatype, const Range& range_bounds);
 

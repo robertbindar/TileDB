@@ -43,73 +43,122 @@ tdb_shared_ptr<RangeManager> create_default_range_manager(
     Datatype datatype, const Range& range_bounds) {
   switch (datatype) {
     case Datatype::INT8:
-      return make_shared<DimensionRangeManager<int8_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<int8_t, Datatype::INT8>(range_bounds);
     case Datatype::UINT8:
-      return make_shared<DimensionRangeManager<uint8_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<uint8_t, Datatype::UINT8>(
+          range_bounds);
     case Datatype::INT16:
-      return make_shared<DimensionRangeManager<int16_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<int16_t, Datatype::INT16>(
+          range_bounds);
     case Datatype::UINT16:
-      return make_shared<DimensionRangeManager<uint16_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<uint16_t, Datatype::UINT16>(
+          range_bounds);
     case Datatype::INT32:
-      return make_shared<DimensionRangeManager<int32_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<int32_t, Datatype::INT32>(
+          range_bounds);
     case Datatype::UINT32:
-      return make_shared<DimensionRangeManager<uint32_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<uint32_t, Datatype::UINT32>(
+          range_bounds);
     case Datatype::INT64:
-      return make_shared<DimensionRangeManager<int64_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<int64_t, Datatype::INT64>(
+          range_bounds);
     case Datatype::UINT64:
-      return make_shared<DimensionRangeManager<uint64_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<uint64_t, Datatype::UINT64>(
+          range_bounds);
     case Datatype::FLOAT32:
-      return make_shared<DimensionRangeManager<float, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<float, Datatype::FLOAT32>(
+          range_bounds);
     case Datatype::FLOAT64:
-      return make_shared<DimensionRangeManager<double, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<double, Datatype::FLOAT64>(
+          range_bounds);
     case Datatype::DATETIME_YEAR:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_YEAR>(
+          range_bounds);
     case Datatype::DATETIME_MONTH:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_MONTH>(
+          range_bounds);
     case Datatype::DATETIME_WEEK:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_WEEK>(
+          range_bounds);
     case Datatype::DATETIME_DAY:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_DAY>(
+          range_bounds);
     case Datatype::DATETIME_HR:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_HR>(
+          range_bounds);
     case Datatype::DATETIME_MIN:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_MIN>(
+          range_bounds);
     case Datatype::DATETIME_SEC:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_SEC>(
+          range_bounds);
     case Datatype::DATETIME_MS:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_MS>(
+          range_bounds);
     case Datatype::DATETIME_US:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_US>(
+          range_bounds);
     case Datatype::DATETIME_NS:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_NS>(
+          range_bounds);
     case Datatype::DATETIME_PS:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_PS>(
+          range_bounds);
     case Datatype::DATETIME_FS:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_FS>(
+          range_bounds);
     case Datatype::DATETIME_AS:
+      return create_default_range_manager<int64_t, Datatype::DATETIME_AS>(
+          range_bounds);
     case Datatype::TIME_HR:
+      return create_default_range_manager<int64_t, Datatype::TIME_HR>(
+          range_bounds);
     case Datatype::TIME_MIN:
+      return create_default_range_manager<int64_t, Datatype::TIME_MIN>(
+          range_bounds);
     case Datatype::TIME_SEC:
+      return create_default_range_manager<int64_t, Datatype::TIME_SEC>(
+          range_bounds);
     case Datatype::TIME_MS:
+      return create_default_range_manager<int64_t, Datatype::TIME_MS>(
+          range_bounds);
     case Datatype::TIME_US:
+      return create_default_range_manager<int64_t, Datatype::TIME_US>(
+          range_bounds);
     case Datatype::TIME_NS:
+      return create_default_range_manager<int64_t, Datatype::TIME_NS>(
+          range_bounds);
     case Datatype::TIME_PS:
+      return create_default_range_manager<int64_t, Datatype::TIME_PS>(
+          range_bounds);
     case Datatype::TIME_FS:
+      return create_default_range_manager<int64_t, Datatype::TIME_FS>(
+          range_bounds);
     case Datatype::TIME_AS:
-      return make_shared<DimensionRangeManager<int64_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<int64_t, Datatype::TIME_AS>(
+          range_bounds);
     case Datatype::CHAR:
-      return make_shared<DimensionRangeManager<char, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<char, Datatype::CHAR>(range_bounds);
     case Datatype::STRING_ASCII:
+      return create_default_range_manager<std::string, Datatype::STRING_ASCII>(
+          range_bounds);
     case Datatype::STRING_UTF8:
+      return create_default_range_manager<std::string, Datatype::STRING_UTF8>(
+          range_bounds);
     case Datatype::STRING_UTF16:
+      return create_default_range_manager<std::string, Datatype::STRING_UTF16>(
+          range_bounds);
     case Datatype::STRING_UTF32:
+      return create_default_range_manager<std::string, Datatype::STRING_UTF32>(
+          range_bounds);
     case Datatype::STRING_UCS2:
+      return create_default_range_manager<std::string, Datatype::STRING_UCS2>(
+          range_bounds);
     case Datatype::STRING_UCS4:
-      return make_shared<DimensionRangeManager<std::string, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<std::string, Datatype::STRING_UCS4>(
+          range_bounds);
     case Datatype::ANY:
-      return make_shared<DimensionRangeManager<uint8_t, false>>(
-          HERE(), range_bounds);
+      return create_default_range_manager<uint8_t, Datatype::ANY>(range_bounds);
     default:
       LOG_FATAL("Unexpected datatype " + datatype_str(datatype));
       return nullptr;
@@ -123,72 +172,124 @@ tdb_shared_ptr<RangeManager> create_range_manager(
     bool coalesce_ranges) {
   switch (datatype) {
     case Datatype::INT8:
-      return create_range_manager<int8_t>(
+      return create_range_manager<int8_t, Datatype::INT8>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::UINT8:
-      return create_range_manager<uint8_t>(
+      return create_range_manager<uint8_t, Datatype::UINT8>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::INT16:
-      return create_range_manager<int16_t>(
+      return create_range_manager<int16_t, Datatype::INT16>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::UINT16:
-      return create_range_manager<uint16_t>(
+      return create_range_manager<uint16_t, Datatype::UINT16>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::INT32:
-      return create_range_manager<int32_t>(
+      return create_range_manager<int32_t, Datatype::INT32>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::UINT32:
-      return create_range_manager<uint32_t>(
+      return create_range_manager<uint32_t, Datatype::UINT32>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::INT64:
-      return create_range_manager<int64_t>(
+      return create_range_manager<int64_t, Datatype::INT64>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::UINT64:
-      return create_range_manager<uint64_t>(
+      return create_range_manager<uint64_t, Datatype::UINT64>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::FLOAT32:
-      return create_range_manager<float>(
+      return create_range_manager<float, Datatype::FLOAT32>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::FLOAT64:
-      return create_range_manager<double>(
+      return create_range_manager<double, Datatype::FLOAT64>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_YEAR:
+      return create_range_manager<int64_t, Datatype::DATETIME_YEAR>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_MONTH:
+      return create_range_manager<int64_t, Datatype::DATETIME_MONTH>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_WEEK:
+      return create_range_manager<int64_t, Datatype::DATETIME_WEEK>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_DAY:
+      return create_range_manager<int64_t, Datatype::DATETIME_DAY>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_HR:
+      return create_range_manager<int64_t, Datatype::DATETIME_HR>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_MIN:
+      return create_range_manager<int64_t, Datatype::DATETIME_MIN>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_SEC:
+      return create_range_manager<int64_t, Datatype::DATETIME_SEC>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_MS:
+      return create_range_manager<int64_t, Datatype::DATETIME_MS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_US:
+      return create_range_manager<int64_t, Datatype::DATETIME_US>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_NS:
+      return create_range_manager<int64_t, Datatype::DATETIME_NS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_PS:
+      return create_range_manager<int64_t, Datatype::DATETIME_PS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_FS:
+      return create_range_manager<int64_t, Datatype::DATETIME_FS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::DATETIME_AS:
+      return create_range_manager<int64_t, Datatype::DATETIME_AS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_HR:
+      return create_range_manager<int64_t, Datatype::TIME_HR>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_MIN:
+      return create_range_manager<int64_t, Datatype::TIME_MIN>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_SEC:
+      return create_range_manager<int64_t, Datatype::TIME_SEC>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_MS:
+      return create_range_manager<int64_t, Datatype::TIME_MS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_US:
+      return create_range_manager<int64_t, Datatype::TIME_US>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_NS:
+      return create_range_manager<int64_t, Datatype::TIME_NS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_PS:
+      return create_range_manager<int64_t, Datatype::TIME_PS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_FS:
+      return create_range_manager<int64_t, Datatype::TIME_FS>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::TIME_AS:
-      return create_range_manager<int64_t>(
+      return create_range_manager<int64_t, Datatype::TIME_AS>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::CHAR:
-      return create_range_manager<char>(
+      return create_range_manager<char, Datatype::CHAR>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_ASCII:
+      return create_range_manager<std::string, Datatype::STRING_ASCII>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_UTF8:
+      return create_range_manager<std::string, Datatype::STRING_UTF8>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_UTF16:
+      return create_range_manager<std::string, Datatype::STRING_UTF16>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_UTF32:
+      return create_range_manager<std::string, Datatype::STRING_UTF32>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_UCS2:
+      return create_range_manager<std::string, Datatype::STRING_UCS2>(
+          range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::STRING_UCS4:
-      return create_range_manager<std::string>(
+      return create_range_manager<std::string, Datatype::STRING_UCS4>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     case Datatype::ANY:
-      return create_range_manager<uint8_t>(
+      return create_range_manager<uint8_t, Datatype::ANY>(
           range_bounds, allow_multiple_ranges, coalesce_ranges);
     default:
       LOG_FATAL("Unexpected datatype " + datatype_str(datatype));

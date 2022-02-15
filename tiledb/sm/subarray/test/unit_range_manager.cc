@@ -42,7 +42,7 @@ using namespace tiledb::sm;
 TEST_CASE("CreateDefaultDimensionRangeManager") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  DimensionRangeManager<uint64_t, false> range_manager{range};
+  DimensionRangeManager<uint64_t, Datatype::UINT64, false> range_manager{range};
   CHECK(range_manager.num_ranges() == 1);
   Range default_range = range_manager.get_range(0);
   CHECK(!default_range.empty());
@@ -56,7 +56,8 @@ TEST_CASE("CreateDefaultDimensionRangeManager") {
 TEST_CASE("DimensionRangeManager::DimensionRangeManager") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  DimensionRangeManager<uint64_t, true> range_manager{range, true};
+  DimensionRangeManager<uint64_t, Datatype::UINT64, true> range_manager{range,
+                                                                        true};
   CHECK(range_manager.num_ranges() == 0);
   SECTION("Add 2 Overlapping Ranges") {
     uint64_t data1[2] = {1, 3};
@@ -78,7 +79,8 @@ TEST_CASE("DimensionRangeManager::DimensionRangeManager") {
 TEST_CASE("DimensionRangeManager::AddRange - coalesce float") {
   float bounds[2] = {-1.0, 1.0};
   Range range{bounds, 2 * sizeof(float)};
-  DimensionRangeManager<float, true> range_manager{range, true};
+  DimensionRangeManager<float, Datatype::FLOAT32, true> range_manager{range,
+                                                                      true};
   CHECK(range_manager.num_ranges() == 0);
   SECTION("Add 2 Overlapping Ranges") {
     float data1[2] = {-0.5, 0.5};
