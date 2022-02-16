@@ -1203,7 +1203,7 @@ Status Writer::filter_tile(
 
   assert(!tile->filtered());
   RETURN_NOT_OK(filters.run_forward(
-      stats_, tile, offsets_tile, storage_manager_->compute_tp()));
+      stats_, tile, offsets_tile, storage_manager_->compute_tp(), false));
   assert(tile->filtered());
 
   tile->set_pre_filtered_size(orig_size);
