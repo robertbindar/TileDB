@@ -100,7 +100,7 @@ Subarray::Subarray(
     StorageManager* storage_manager)
     : stats_(
           parent_stats ? parent_stats->create_child("Subarray") :
-                         storage_manager ?
+          storage_manager ?
                          storage_manager->stats()->create_child("subSubarray") :
                          nullptr)
     , logger_(logger->clone("Subarray", ++logger_id_))
@@ -164,9 +164,8 @@ Status Subarray::add_range(
   // Remove the default range
   auto dim = array_->array_schema_latest()->dimension(dim_idx);
   if (range_subsets_[dim_idx]->is_default()) {
-    bool allow_adding = layout_ == Layout::GLOBAL_ORDER;
     range_subsets_.at(dim_idx) = create_range_subset(
-        dim->type(), dim->domain(), allow_adding, coalesce_ranges_);
+        dim->type(), dim->domain(), false, coalesce_ranges_);
   }
 
   // TODO: Move the following into RangeSubset.add_range and replace
@@ -193,9 +192,8 @@ Status Subarray::add_range_unsafe(uint32_t dim_idx, const Range& range) {
   // Remove the default range
   if (range_subsets_.at(dim_idx)->is_default()) {
     auto dim = array_->array_schema_latest()->dimension(dim_idx);
-    bool allow_adding = layout_ == Layout::GLOBAL_ORDER;
     range_subsets_.at(dim_idx) = create_range_subset(
-        dim->type(), dim->domain(), allow_adding, coalesce_ranges_);
+        dim->type(), dim->domain(), false, coalesce_ranges_);
   }
 
   // Add the range
@@ -842,8 +840,11 @@ void Subarray::set_is_default(uint32_t dim_index, bool is_default) {
   if (is_default) {
     auto array_schema = array_->array_schema_latest();
     auto domain = array_schema->domain()->domain();
-    range_subsets_.push_back(create_default_range_subset(
-        array_schema->dimension(dim_index)->type(), domain[dim_index]));
+    range_subsets_.at(dim_index) = create_range_subset(
+        array_schema->dimension(dim_index)->type(),
+        domain[dim_index],
+        is_default,
+        coalesce_ranges_);
   }
 }
 
@@ -1541,10 +1542,9 @@ const std::vector<Range>& Subarray::ranges_for_dim(uint32_t dim_idx) const {
 
 Status Subarray::set_ranges_for_dim(
     uint32_t dim_idx, const std::vector<Range>& ranges) {
-  bool allow_adding = layout_ == Layout::GLOBAL_ORDER;
   auto dim = array_->array_schema_latest()->dimension(dim_idx);
-  range_subsets_[dim_idx] = create_range_subset(
-      dim->type(), dim->domain(), allow_adding, coalesce_ranges_);
+  range_subsets_[dim_idx] =
+      create_range_subset(dim->type(), dim->domain(), false, coalesce_ranges_);
 
   // Add each range individually so that contiguous
   // ranges may be coalesced.
@@ -1875,8 +1875,8 @@ void Subarray::add_default_ranges() {
 
   range_subsets_.clear();
   for (unsigned d = 0; d < dim_num; ++d) {
-    range_subsets_.push_back(create_default_range_subset(
-        array_schema->dimension(d)->type(), domain[d]));
+    range_subsets_.push_back(create_range_subset(
+        array_schema->dimension(d)->type(), domain[d], true, coalesce_ranges_));
   }
 }
 

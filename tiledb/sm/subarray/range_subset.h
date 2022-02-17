@@ -223,12 +223,6 @@ class RangeSubset : public RangeSubsetBase {
    */
   bool is_default_ = true;
 
-  /**
-   * If ``true``, allow this to hold multiple ranges. If false, if can only be
-   * emply or have a single range.
-   */
-  bool allow_multiple_ranges_ = true;
-
   /** Stored ranges. */
   std::vector<Range> ranges_;
 
@@ -237,29 +231,19 @@ class RangeSubset : public RangeSubsetBase {
   RangeSubset() = delete;
 
   /**
-   * Constructor for the default RangeSubset.
+   * Constructor for the RangeSubset.
    *
-   * This will set the range to the full domain. No new ranges can be added.
+   * @param full_range The range this is a subset of.
+   * @param is_default Flag indicating if this is a default subset. The default
+   * subset is the full range.
    */
-  RangeSubset(const Range& full_range)
+  RangeSubset(const Range& full_range, bool is_default)
       : full_range_(full_range)
-      , is_default_(true)
-      , allow_multiple_ranges_(false)
+      , is_default_(is_default)
       , ranges_() {
-    ranges_.emplace_back(full_range);
+    if (is_default)
+      ranges_.emplace_back(full_range);
   };
-
-  /**
-   * Constructor for the default RangeSubset.
-   *
-   * This will create a new RangeManage and clear all existing data in the
-   * range.
-   */
-  RangeSubset(const Range& full_range, bool allow_multiple_ranges)
-      : full_range_(full_range)
-      , is_default_(false)
-      , allow_multiple_ranges_(allow_multiple_ranges)
-      , ranges_(){};
 
   /** Destructor. */
   ~RangeSubset() = default;
@@ -310,27 +294,16 @@ class RangeSubset : public RangeSubsetBase {
 
 template <typename T, Datatype D>
 tdb_shared_ptr<RangeSubsetBase> create_range_subset(
-    const Range& full_range, bool allow_multiple_ranges, bool coalesce_ranges) {
+    const Range& full_range, bool is_default, bool coalesce_ranges) {
   if (coalesce_ranges)
-    return make_shared<RangeSubset<T, D, true>>(
-        HERE(), full_range, allow_multiple_ranges);
-  return make_shared<RangeSubset<T, D, false>>(
-      HERE(), full_range, allow_multiple_ranges);
+    return make_shared<RangeSubset<T, D, true>>(HERE(), full_range, is_default);
+  return make_shared<RangeSubset<T, D, false>>(HERE(), full_range, is_default);
 };
-
-template <typename T, Datatype D>
-tdb_shared_ptr<RangeSubsetBase> create_default_range_subset(
-    const Range& full_range) {
-  return make_shared<RangeSubset<T, D, false>>(HERE(), full_range);
-};
-
-tdb_shared_ptr<RangeSubsetBase> create_default_range_subset(
-    Datatype datatype, const Range& full_range);
 
 tdb_shared_ptr<RangeSubsetBase> create_range_subset(
     Datatype datatype,
     const Range& full_range,
-    bool allow_adding,
+    bool is_default,
     bool coalesce_ranges);
 
 }  // namespace sm
