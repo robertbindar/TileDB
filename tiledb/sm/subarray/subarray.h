@@ -43,7 +43,7 @@
 #include "tiledb/sm/misc/tile_overlap.h"
 #include "tiledb/sm/misc/types.h"
 #include "tiledb/sm/stats/stats.h"
-#include "tiledb/sm/subarray/range_manager.h"
+#include "tiledb/sm/subarray/range_subset.h"
 #include "tiledb/sm/subarray/subarray_tile_overlap.h"
 
 #include <cmath>
@@ -1045,10 +1045,10 @@ class Subarray {
   Layout cell_order_;
 
   /**
-   * Stores a vector of RangeManager objects, one per dimension, for handling
+   * Stores a vector of RangeSubset objects, one per dimension, for handling
    * operations on ranges.
    */
-  std::vector<tdb_shared_ptr<RangeManager>> range_managers_;
+  std::vector<tdb_shared_ptr<RangeSubsetBase>> range_subsets_;
 
   /** Important for computed an ND range index from a flat serialized index. */
   std::vector<uint64_t> range_offsets_;

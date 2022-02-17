@@ -1,5 +1,5 @@
 /**
- * @file   range_manager.h
+ * @file   range_subset.h
  *
  * @section LICENSE
  *
@@ -27,11 +27,11 @@
  *
  * @section DESCRIPTION
  *
- * This file defines the class RangeManager.
+ * This file defines the class RangeSubset.
  */
 
-#ifndef TILEDB_RANGE_MANAGER_H
-#define TILEDB_RANGE_MANAGER_H
+#ifndef TILEDB_RANGE_SUBSET_H
+#define TILEDB_RANGE_SUBSET_H
 
 #include "tiledb/common/heap_memory.h"
 #include "tiledb/sm/enums/datatype.h"
@@ -147,14 +147,14 @@ struct SortStrategy<Datatype::STRING_ASCII, std::string, std::string> {
 
 }  // namespace detail
 
-class RangeManager {
+class RangeSubsetBase {
  public:
   /* ********************************* */
   /*     CONSTRUCTORS & DESTRUCTORS    */
   /* ********************************* */
 
   /** Destructor. */
-  virtual ~RangeManager() = default;
+  virtual ~RangeSubsetBase() = default;
 
   // /**
   //  * Adds a range to the range manager. If a default range manager strategy
@@ -208,13 +208,13 @@ class RangeManager {
 };
 
 template <typename T, Datatype D, bool CoalesceAdds>
-class DimensionRangeManager : public RangeManager {
+class RangeSubset : public RangeSubsetBase {
  private:
   using AddStrategy = detail::AddStrategy<CoalesceAdds, T>;
   using SortStrategy = detail::SortStrategy<D, T>;
 
   /** Maximum possible range. */
-  Range bounds_;
+  Range full_range_;
 
   /**
    * If ``true``, the range contains the full domain for the dimension (the
@@ -234,35 +234,35 @@ class DimensionRangeManager : public RangeManager {
 
  public:
   /** Disable default constructor. */
-  DimensionRangeManager() = delete;
+  RangeSubset() = delete;
 
   /**
-   * Constructor for the default RangeManager.
+   * Constructor for the default RangeSubset.
    *
    * This will set the range to the full domain. No new ranges can be added.
    */
-  DimensionRangeManager(const Range& bounds)
-      : bounds_(bounds)
+  RangeSubset(const Range& full_range)
+      : full_range_(full_range)
       , is_default_(true)
       , allow_multiple_ranges_(false)
       , ranges_() {
-    ranges_.emplace_back(bounds);
+    ranges_.emplace_back(full_range);
   };
 
   /**
-   * Constructor for the default RangeManager.
+   * Constructor for the default RangeSubset.
    *
    * This will create a new RangeManage and clear all existing data in the
    * range.
    */
-  DimensionRangeManager(const Range& bounds, bool allow_multiple_ranges)
-      : bounds_(bounds)
+  RangeSubset(const Range& full_range, bool allow_multiple_ranges)
+      : full_range_(full_range)
       , is_default_(false)
       , allow_multiple_ranges_(allow_multiple_ranges)
       , ranges_(){};
 
   /** Destructor. */
-  ~DimensionRangeManager() = default;
+  ~RangeSubset() = default;
 
   //  Status add_range(
   //      Range&& range,
@@ -309,29 +309,27 @@ class DimensionRangeManager : public RangeManager {
 };
 
 template <typename T, Datatype D>
-tdb_shared_ptr<RangeManager> create_range_manager(
-    const Range& range_bounds,
-    bool allow_multiple_ranges,
-    bool coalesce_ranges) {
+tdb_shared_ptr<RangeSubsetBase> create_range_subset(
+    const Range& full_range, bool allow_multiple_ranges, bool coalesce_ranges) {
   if (coalesce_ranges)
-    return make_shared<DimensionRangeManager<T, D, true>>(
-        HERE(), range_bounds, allow_multiple_ranges);
-  return make_shared<DimensionRangeManager<T, D, false>>(
-      HERE(), range_bounds, allow_multiple_ranges);
+    return make_shared<RangeSubset<T, D, true>>(
+        HERE(), full_range, allow_multiple_ranges);
+  return make_shared<RangeSubset<T, D, false>>(
+      HERE(), full_range, allow_multiple_ranges);
 };
 
 template <typename T, Datatype D>
-tdb_shared_ptr<RangeManager> create_default_range_manager(
-    const Range& range_bounds) {
-  return make_shared<DimensionRangeManager<T, D, false>>(HERE(), range_bounds);
+tdb_shared_ptr<RangeSubsetBase> create_default_range_subset(
+    const Range& full_range) {
+  return make_shared<RangeSubset<T, D, false>>(HERE(), full_range);
 };
 
-tdb_shared_ptr<RangeManager> create_default_range_manager(
-    Datatype datatype, const Range& range_bounds);
+tdb_shared_ptr<RangeSubsetBase> create_default_range_subset(
+    Datatype datatype, const Range& full_range);
 
-tdb_shared_ptr<RangeManager> create_range_manager(
+tdb_shared_ptr<RangeSubsetBase> create_range_subset(
     Datatype datatype,
-    const Range& range_bounds,
+    const Range& full_range,
     bool allow_adding,
     bool coalesce_ranges);
 

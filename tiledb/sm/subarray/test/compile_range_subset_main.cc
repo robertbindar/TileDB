@@ -1,5 +1,5 @@
 /**
- * @file compile_range_manager_main.cc
+ * @file compile_range_subset_main.cc
  *
  * @section license
  *
@@ -26,9 +26,9 @@
  * the software.
  */
 
-#include "../range_manager.h"
+#include "../range_subset.h"
 
 int main() {
-  (void)sizeof(tiledb::sm::RangeManager);
+  (void)sizeof(tiledb::sm::RangeSubsetBase);
   return 0;
 }

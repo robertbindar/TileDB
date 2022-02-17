@@ -268,7 +268,7 @@ if (TILEDB_TESTS)
   add_custom_target(tests)
   add_dependencies(tests tiledb_unit)
   add_dependencies(tests unit_interval unit_datum unit_dynamic_memory unit_thread_pool)
-  add_dependencies(tests unit_filter_create unit_array_schema unit_range_manager)
+  add_dependencies(tests unit_filter_create unit_array_schema unit_range_subset)
 endif()
 
 # Build tools
