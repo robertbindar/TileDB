@@ -190,13 +190,21 @@ class RangeSubsetBase {
    **/
   virtual bool is_default() const = 0;
 
+  /** Returns ``true`` if the range subset is the empty set. */
   virtual bool is_empty() const = 0;
 
-  virtual bool is_unary() const = 0;
+  /**
+   * Returns ``false`` if the subset contains a range other than the default
+   * range.
+   **/
+  virtual bool is_set() const = 0;
 
   /**
-   * Returns the number of distinct ranges stored in the range manager.
+   * Returns ``true`` if there is exactly one unary ranage in the subset.
    */
+  virtual bool is_unary() const = 0;
+
+  /** Returns the number of distinct ranges stored in the range manager. */
   virtual uint64_t num_ranges() const = 0;
 
   /**
@@ -258,6 +266,10 @@ class RangeSubset : public RangeSubsetBase {
   //  };
 
   Status add_range_unsafe(const Range& range) override {
+    if (is_default_) {
+      ranges_.clear();
+      is_default_ = false;
+    }
     return AddStrategy::add_range(ranges_, range);
   };
 
@@ -275,6 +287,10 @@ class RangeSubset : public RangeSubsetBase {
 
   bool is_empty() const override {
     return ranges_.empty();
+  };
+
+  bool is_set() const override {
+    return !is_default_ && !ranges_.empty();
   };
 
   bool is_unary() const override {

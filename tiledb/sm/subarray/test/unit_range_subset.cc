@@ -143,8 +143,8 @@ TEST_CASE("RangeSubset: Test numeric sort", "[range-manager][threadpool]") {
 
 TEST_CASE("RangeSubset::sort - STRING_ASCII") {
   Range range{};
-  RangeSubset<uint64_t, Datatype::STRING_ASCII, false> range_subset{
-      range, false};
+  RangeSubset<uint64_t, Datatype::STRING_ASCII, false> range_subset{range,
+                                                                    false};
   SECTION("Sort 2 reverse ordered non-overlapping ranges") {
     // Set ranges.
     const std::string d1{"cat"};

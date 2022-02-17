@@ -161,25 +161,19 @@ Status Subarray::add_range(
   est_result_size_computed_ = false;
   tile_overlap_.clear();
 
-  // Remove the default range
+  // Global layout can only have one range in the range subset. Check if the
+  // range was already set.
+  if (layout_ == Layout::GLOBAL_ORDER && range_subsets_[dim_idx]->is_set()) {
+    return logger_->status(
+        Status_SubarrayError("Cannot add more than one range per dimension "
+                             "to global order query"));
+  }
+
+  // TODO: Move the following into RangeSubset.add_range and call that instead.
   auto dim = array_->array_schema_latest()->dimension(dim_idx);
-  if (range_subsets_[dim_idx]->is_default()) {
-    range_subsets_.at(dim_idx) = create_range_subset(
-        dim->type(), dim->domain(), false, coalesce_ranges_);
-  }
-
-  // TODO: Move the following into RangeSubset.add_range and replace
-  // `add_range_unsafe` with `add_range`.
-  if (layout_ == Layout::GLOBAL_ORDER && !range_subsets_[dim_idx]->is_empty()) {
-    return logger_->status(Status_SubarrayError(
-        "Cannot add more than one range per dimension to global order query"));
-  }
-
   if (!read_range_oob_error)
     RETURN_NOT_OK(dim->adjust_range_oob(&range));
   RETURN_NOT_OK(dim->check_range(range));
-
-  // Add the range
   range_subsets_[dim_idx]->add_range_unsafe(range);
   return Status::Ok();
 }
@@ -188,13 +182,6 @@ Status Subarray::add_range_unsafe(uint32_t dim_idx, const Range& range) {
   // Must reset the result size and tile overlap
   est_result_size_computed_ = false;
   tile_overlap_.clear();
-
-  // Remove the default range
-  if (range_subsets_.at(dim_idx)->is_default()) {
-    auto dim = array_->array_schema_latest()->dimension(dim_idx);
-    range_subsets_.at(dim_idx) = create_range_subset(
-        dim->type(), dim->domain(), false, coalesce_ranges_);
-  }
 
   // Add the range
   range_subsets_[dim_idx]->add_range_unsafe(range);
