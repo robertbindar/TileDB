@@ -355,8 +355,7 @@ class ChooseGenerator : public Catch::Generators::IGenerator<std::vector<T>> {
 /**
  * Factory for `ChooseGenerator` as the Catch framework requires to consume it.
  * @tparam T The underlying type that we're choosing from.
- * @param k The numb:Ex
- * er of element of `list` to choose from.
+ * @param k The number of element of `list` to choose from.
  * @param list The list from which elements are taken.
  * @return An instance of `ChooseGenerator` wrapped as Catch requires.
  */

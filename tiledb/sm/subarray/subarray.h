@@ -1048,7 +1048,7 @@ class Subarray {
    * Stores a vector of RangeSubset objects, one per dimension, for handling
    * operations on ranges.
    */
-  std::vector<tdb_shared_ptr<RangeSubsetBase>> range_subsets_;
+  std::vector<tdb_shared_ptr<RangeSubsetBase>> range_subset_;
 
   /** Important for computed an ND range index from a flat serialized index. */
   std::vector<uint64_t> range_offsets_;

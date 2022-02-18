@@ -39,6 +39,14 @@ using namespace tiledb::common;
 namespace tiledb {
 namespace sm {
 
+template <typename T, Datatype D>
+tdb_shared_ptr<RangeSubsetBase> create_range_subset_helper(
+    const Range& full_range, bool is_default, bool coalesce_ranges) {
+  if (coalesce_ranges)
+    return make_shared<RangeSubset<T, D, true>>(HERE(), full_range, is_default);
+  return make_shared<RangeSubset<T, D, false>>(HERE(), full_range, is_default);
+};
+
 tdb_shared_ptr<RangeSubsetBase> create_range_subset(
     Datatype datatype,
     const Range& full_range,
@@ -46,124 +54,124 @@ tdb_shared_ptr<RangeSubsetBase> create_range_subset(
     bool coalesce_ranges) {
   switch (datatype) {
     case Datatype::INT8:
-      return create_range_subset<int8_t, Datatype::INT8>(
+      return create_range_subset_helper<int8_t, Datatype::INT8>(
           full_range, is_default, coalesce_ranges);
     case Datatype::UINT8:
-      return create_range_subset<uint8_t, Datatype::UINT8>(
+      return create_range_subset_helper<uint8_t, Datatype::UINT8>(
           full_range, is_default, coalesce_ranges);
     case Datatype::INT16:
-      return create_range_subset<int16_t, Datatype::INT16>(
+      return create_range_subset_helper<int16_t, Datatype::INT16>(
           full_range, is_default, coalesce_ranges);
     case Datatype::UINT16:
-      return create_range_subset<uint16_t, Datatype::UINT16>(
+      return create_range_subset_helper<uint16_t, Datatype::UINT16>(
           full_range, is_default, coalesce_ranges);
     case Datatype::INT32:
-      return create_range_subset<int32_t, Datatype::INT32>(
+      return create_range_subset_helper<int32_t, Datatype::INT32>(
           full_range, is_default, coalesce_ranges);
     case Datatype::UINT32:
-      return create_range_subset<uint32_t, Datatype::UINT32>(
+      return create_range_subset_helper<uint32_t, Datatype::UINT32>(
           full_range, is_default, coalesce_ranges);
     case Datatype::INT64:
-      return create_range_subset<int64_t, Datatype::INT64>(
+      return create_range_subset_helper<int64_t, Datatype::INT64>(
           full_range, is_default, coalesce_ranges);
     case Datatype::UINT64:
-      return create_range_subset<uint64_t, Datatype::UINT64>(
+      return create_range_subset_helper<uint64_t, Datatype::UINT64>(
           full_range, is_default, coalesce_ranges);
     case Datatype::FLOAT32:
-      return create_range_subset<float, Datatype::FLOAT32>(
+      return create_range_subset_helper<float, Datatype::FLOAT32>(
           full_range, is_default, coalesce_ranges);
     case Datatype::FLOAT64:
-      return create_range_subset<double, Datatype::FLOAT64>(
+      return create_range_subset_helper<double, Datatype::FLOAT64>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_YEAR:
-      return create_range_subset<int64_t, Datatype::DATETIME_YEAR>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_YEAR>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_MONTH:
-      return create_range_subset<int64_t, Datatype::DATETIME_MONTH>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_MONTH>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_WEEK:
-      return create_range_subset<int64_t, Datatype::DATETIME_WEEK>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_WEEK>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_DAY:
-      return create_range_subset<int64_t, Datatype::DATETIME_DAY>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_DAY>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_HR:
-      return create_range_subset<int64_t, Datatype::DATETIME_HR>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_HR>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_MIN:
-      return create_range_subset<int64_t, Datatype::DATETIME_MIN>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_MIN>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_SEC:
-      return create_range_subset<int64_t, Datatype::DATETIME_SEC>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_SEC>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_MS:
-      return create_range_subset<int64_t, Datatype::DATETIME_MS>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_MS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_US:
-      return create_range_subset<int64_t, Datatype::DATETIME_US>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_US>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_NS:
-      return create_range_subset<int64_t, Datatype::DATETIME_NS>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_NS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_PS:
-      return create_range_subset<int64_t, Datatype::DATETIME_PS>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_PS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_FS:
-      return create_range_subset<int64_t, Datatype::DATETIME_FS>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_FS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::DATETIME_AS:
-      return create_range_subset<int64_t, Datatype::DATETIME_AS>(
+      return create_range_subset_helper<int64_t, Datatype::DATETIME_AS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_HR:
-      return create_range_subset<int64_t, Datatype::TIME_HR>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_HR>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_MIN:
-      return create_range_subset<int64_t, Datatype::TIME_MIN>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_MIN>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_SEC:
-      return create_range_subset<int64_t, Datatype::TIME_SEC>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_SEC>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_MS:
-      return create_range_subset<int64_t, Datatype::TIME_MS>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_MS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_US:
-      return create_range_subset<int64_t, Datatype::TIME_US>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_US>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_NS:
-      return create_range_subset<int64_t, Datatype::TIME_NS>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_NS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_PS:
-      return create_range_subset<int64_t, Datatype::TIME_PS>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_PS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_FS:
-      return create_range_subset<int64_t, Datatype::TIME_FS>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_FS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::TIME_AS:
-      return create_range_subset<int64_t, Datatype::TIME_AS>(
+      return create_range_subset_helper<int64_t, Datatype::TIME_AS>(
           full_range, is_default, coalesce_ranges);
     case Datatype::CHAR:
-      return create_range_subset<char, Datatype::CHAR>(
+      return create_range_subset_helper<char, Datatype::CHAR>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_ASCII:
-      return create_range_subset<std::string, Datatype::STRING_ASCII>(
+      return create_range_subset_helper<std::string, Datatype::STRING_ASCII>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_UTF8:
-      return create_range_subset<std::string, Datatype::STRING_UTF8>(
+      return create_range_subset_helper<std::string, Datatype::STRING_UTF8>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_UTF16:
-      return create_range_subset<std::string, Datatype::STRING_UTF16>(
+      return create_range_subset_helper<std::string, Datatype::STRING_UTF16>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_UTF32:
-      return create_range_subset<std::string, Datatype::STRING_UTF32>(
+      return create_range_subset_helper<std::string, Datatype::STRING_UTF32>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_UCS2:
-      return create_range_subset<std::string, Datatype::STRING_UCS2>(
+      return create_range_subset_helper<std::string, Datatype::STRING_UCS2>(
           full_range, is_default, coalesce_ranges);
     case Datatype::STRING_UCS4:
-      return create_range_subset<std::string, Datatype::STRING_UCS4>(
+      return create_range_subset_helper<std::string, Datatype::STRING_UCS4>(
           full_range, is_default, coalesce_ranges);
     case Datatype::ANY:
-      return create_range_subset<uint8_t, Datatype::ANY>(
+      return create_range_subset_helper<uint8_t, Datatype::ANY>(
           full_range, is_default, coalesce_ranges);
     default:
       LOG_FATAL("Unexpected datatype " + datatype_str(datatype));

@@ -49,7 +49,7 @@ namespace sm {
 
 namespace detail {
 
-// Default add strategy: simple add.
+/** Default add strategy: simple add. */
 template <bool Coalesce, typename T, typename Enable = T>
 struct AddStrategy {
   static Status add_range(std::vector<Range>& ranges, const Range& new_range) {
@@ -58,7 +58,7 @@ struct AddStrategy {
   };
 };
 
-// Specialization for coalesing integer-type ranges.
+/** Specialization for coalescing integer-type ranges. */
 template <typename T>
 struct AddStrategy<
     true,
@@ -156,18 +156,6 @@ class RangeSubsetBase {
   /** Destructor. */
   virtual ~RangeSubsetBase() = default;
 
-  // /**
-  //  * Adds a range to the range manager. If a default range manager strategy
-  //  is,
-  //  * then first update the range strategy.
-  //  *
-  //  * @param ranges The current ranges in the subarray (remove after
-  //  refactor).
-  //  * @param new_range The range to add.
-  //  */
-  // // virtual Status add_range(
-  // //   std::vector<std::vector<Range>>& ranges, Range&& new_range) = 0;
-
   /**
    * Adds a range to the range manager without performing any checkes. If a
    * default strategy is set, then first update the range strategy.
@@ -256,15 +244,6 @@ class RangeSubset : public RangeSubsetBase {
   /** Destructor. */
   ~RangeSubset() = default;
 
-  //  Status add_range(
-  //      Range&& range,
-  //      bool error_on_oob) {
-  //    if (!error_on_oob)
-  //      RETURN_NOT_OK(adjust_range_oob(&new_range));
-  //    RETURN_NOT_OK(check_range(&new_range));
-  //    add_range_unsafe(ranges, new_range);
-  //  };
-
   Status add_range_unsafe(const Range& range) override {
     if (is_default_) {
       ranges_.clear();
@@ -306,14 +285,6 @@ class RangeSubset : public RangeSubsetBase {
   Status sort_ranges(ThreadPool* const compute_tp) override {
     return SortStrategy::sort(compute_tp, ranges_);
   };
-};
-
-template <typename T, Datatype D>
-tdb_shared_ptr<RangeSubsetBase> create_range_subset(
-    const Range& full_range, bool is_default, bool coalesce_ranges) {
-  if (coalesce_ranges)
-    return make_shared<RangeSubset<T, D, true>>(HERE(), full_range, is_default);
-  return make_shared<RangeSubset<T, D, false>>(HERE(), full_range, is_default);
 };
 
 tdb_shared_ptr<RangeSubsetBase> create_range_subset(
