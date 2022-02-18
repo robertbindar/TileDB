@@ -145,16 +145,14 @@ struct SortStrategy<Datatype::STRING_ASCII, std::string, std::string> {
   };
 };
 
-}  // namespace detail
-
-class RangeSubsetBase {
+class RangeSubsetInternals {
  public:
   /* ********************************* */
   /*     CONSTRUCTORS & DESTRUCTORS    */
   /* ********************************* */
 
   /** Destructor. */
-  virtual ~RangeSubsetBase() = default;
+  virtual ~RangeSubsetInternals() = default;
 
   /**
    * Adds a range to the range manager without performing any checkes. If a
@@ -164,53 +162,43 @@ class RangeSubsetBase {
    refactor).
    * @param new_range The range to add.
    */
-  virtual Status add_range_unsafe(const Range& range) = 0;
-
-  virtual const Range& get_range(const uint64_t range_index) const = 0;
-
-  virtual const std::vector<Range>& get_ranges() const = 0;
-
-  /**
-   * Returns ``true`` if the current range is the default range.
-   *
-   * The default range is the full range for the dimension the range is
-   * managing.
-   **/
-  virtual bool is_default() const = 0;
-
-  /** Returns ``true`` if the range subset is the empty set. */
-  virtual bool is_empty() const = 0;
-
-  /**
-   * Returns ``false`` if the subset contains a range other than the default
-   * range.
-   **/
-  virtual bool is_set() const = 0;
-
-  /**
-   * Returns ``true`` if there is exactly one unary ranage in the subset.
-   */
-  virtual bool is_unary() const = 0;
-
-  /** Returns the number of distinct ranges stored in the range manager. */
-  virtual uint64_t num_ranges() const = 0;
+  virtual Status add_range_unsafe(
+      std::vector<Range>& ranges, const Range& range) = 0;
 
   /**
    * Sorts the ranges in the range manager.
    *
    * @param compute_tp
    */
-  virtual Status sort_ranges(ThreadPool* const compute_tp) = 0;
+  virtual Status sort_ranges(
+      ThreadPool* const compute_tp, std::vector<Range>& ranges) = 0;
 };
 
 template <typename T, Datatype D, bool CoalesceAdds>
-class RangeSubset : public RangeSubsetBase {
+class RangeSubsetInternalsImpl : public RangeSubsetInternals {
  private:
-  using AddStrategy = detail::AddStrategy<CoalesceAdds, T>;
-  using SortStrategy = detail::SortStrategy<D, T>;
+  using AddRange = AddStrategy<CoalesceAdds, T>;
+  using SortRanges = SortStrategy<D, T>;
 
+ public:
+  Status add_range_unsafe(
+      std::vector<Range>& ranges, const Range& new_range) override {
+    return AddRange::add_range(ranges, new_range);
+  };
+
+  Status sort_ranges(
+      ThreadPool* const compute_tp, std::vector<Range>& ranges) override {
+    return SortRanges::sort(compute_tp, ranges);
+  };
+};
+
+}  // namespace detail
+
+class RangeSubset {
+ private:
+  tdb_shared_ptr<detail::RangeSubsetInternals> impl_ = nullptr;
   /** Maximum possible range. */
-  Range full_range_;
+  Range full_range_ = Range();
 
   /**
    * If ``true``, the range contains the full domain for the dimension (the
@@ -220,78 +208,100 @@ class RangeSubset : public RangeSubsetBase {
   bool is_default_ = true;
 
   /** Stored ranges. */
-  std::vector<Range> ranges_;
+  std::vector<Range> ranges_{};
 
  public:
-  /** Disable default constructor. */
-  RangeSubset() = delete;
+  /* ********************************* */
+  /*     CONSTRUCTORS & DESTRUCTORS    */
+  /* ********************************* */
 
-  /**
-   * Constructor for the RangeSubset.
-   *
-   * @param full_range The range this is a subset of.
-   * @param is_default Flag indicating if this is a default subset. The default
-   * subset is the full range.
-   */
-  RangeSubset(const Range& full_range, bool is_default)
-      : full_range_(full_range)
-      , is_default_(is_default)
-      , ranges_() {
-    if (is_default)
-      ranges_.emplace_back(full_range);
-  };
+  /** Default constructor. */
+  RangeSubset() = default;
+
+  /** General constructor. */
+  RangeSubset(
+      Datatype datatype,
+      const Range& full_range,
+      bool is_default,
+      bool coalesce_ranges);
 
   /** Destructor. */
   ~RangeSubset() = default;
 
-  Status add_range_unsafe(const Range& range) override {
+  /**
+   * Adds a range to the range manager without performing any checkes. If a
+   * default strategy is set, then first update the range strategy.
+   *
+   * @param ranges The current ranges in the subarray (remove after
+   refactor).
+   * @param new_range The range to add.
+   */
+  Status add_range_unsafe(const Range& range) {
     if (is_default_) {
       ranges_.clear();
       is_default_ = false;
     }
-    return AddStrategy::add_range(ranges_, range);
-  };
+    return impl_->add_range_unsafe(ranges_, range);
+  }
 
-  const Range& get_range(const uint64_t range_index) const override {
+  const Range& get_range(const uint64_t range_index) const {
     return ranges_[range_index];
   };
 
-  const std::vector<Range>& get_ranges() const override {
+  const std::vector<Range>& get_ranges() const {
     return ranges_;
   };
 
-  bool is_default() const override {
+  /**
+   * Returns ``true`` if the current range is the default range.
+   *
+   * The default range is the full range for the dimension the range is
+   * managing.
+   **/
+  bool is_default() const {
     return is_default_;
   };
 
-  bool is_empty() const override {
+  /** Returns ``true`` if the range subset is the empty set. */
+  bool is_empty() const {
     return ranges_.empty();
   };
 
-  bool is_set() const override {
+  /**
+   * Returns ``false`` if the subset contains a range other than the default
+   * range.
+   *
+   * IMPORTANT: This method is different from the `is_set` method of the
+   *Subarray. The Subarray class only checks if any ranges are not default
+   *whereas this method considers the RangeSubset to be unset if it is cleared.
+   **/
+  bool is_set() const {
     return !is_default_ && !ranges_.empty();
   };
 
-  bool is_unary() const override {
+  /**
+   * Returns ``true`` if there is exactly one unary ranage in the subset.
+   */
+  bool is_unary() const {
     if (ranges_.size() != 1)
       return false;
     return ranges_[0].unary();
   };
 
-  uint64_t num_ranges() const override {
+  /** Returns the number of distinct ranges stored in the range manager. */
+  uint64_t num_ranges() const {
     return ranges_.size();
   };
 
-  Status sort_ranges(ThreadPool* const compute_tp) override {
-    return SortStrategy::sort(compute_tp, ranges_);
+  /**
+   * Sorts the ranges in the range manager.
+   *
+   * @param compute_tp
+   */
+  Status sort_ranges(ThreadPool* const compute_tp) {
+    return impl_->sort_ranges(compute_tp, ranges_);
   };
 };
-
-tdb_shared_ptr<RangeSubsetBase> create_range_subset(
-    Datatype datatype,
-    const Range& full_range,
-    bool is_default,
-    bool coalesce_ranges);
 
 }  // namespace sm
 }  // namespace tiledb

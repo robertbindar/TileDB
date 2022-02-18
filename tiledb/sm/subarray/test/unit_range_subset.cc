@@ -43,7 +43,7 @@ using namespace tiledb::sm;
 TEST_CASE("CreateDefaultRangeSubset") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  RangeSubset<uint64_t, Datatype::UINT64, false> range_subset{range, true};
+  RangeSubset range_subset{Datatype::UINT64, range, true, false};
   CHECK(range_subset.num_ranges() == 1);
   Range default_range = range_subset.get_range(0);
   CHECK(!default_range.empty());
@@ -57,7 +57,7 @@ TEST_CASE("CreateDefaultRangeSubset") {
 TEST_CASE("RangeSubset::RangeSubset") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  RangeSubset<uint64_t, Datatype::UINT64, true> range_subset{range, false};
+  RangeSubset range_subset{Datatype::UINT64, range, false, true};
   CHECK(range_subset.num_ranges() == 0);
   SECTION("Add 2 Overlapping Ranges") {
     uint64_t data1[2] = {1, 3};
@@ -79,7 +79,7 @@ TEST_CASE("RangeSubset::RangeSubset") {
 TEST_CASE("RangeSubset::add_range - coalesce float") {
   float bounds[2] = {-1.0, 1.0};
   Range range{bounds, 2 * sizeof(float)};
-  RangeSubset<float, Datatype::FLOAT32, true> range_subset{range, false};
+  RangeSubset range_subset{Datatype::FLOAT32, range, false, true};
   CHECK(range_subset.num_ranges() == 0);
   SECTION("Add 2 Overlapping Ranges") {
     float data1[2] = {-0.5, 0.5};
@@ -96,7 +96,7 @@ TEST_CASE("RangeSubset::add_range - coalesce float") {
 TEST_CASE("RangeSubset: Test unsortable", "[range-manager][threadpool]") {
   char bound_data[2] = {'a', 'c'};
   Range range{bound_data, 2 * sizeof(char)};
-  RangeSubset<char, Datatype::CHAR, true> range_subset{range, true};
+  RangeSubset range_subset{Datatype::CHAR, range, true, true};
   REQUIRE(range_subset.num_ranges() == 1);
   ThreadPool pool;
   REQUIRE(pool.init(2).ok());
@@ -108,7 +108,7 @@ TEST_CASE("RangeSubset: Test unsortable", "[range-manager][threadpool]") {
 TEST_CASE("RangeSubset: Test numeric sort", "[range-manager][threadpool]") {
   uint64_t bounds[2] = {0, 10};
   Range range{bounds, 2 * sizeof(uint64_t)};
-  RangeSubset<uint64_t, Datatype::UINT64, true> range_subset{range, false};
+  RangeSubset range_subset{Datatype::UINT64, range, false, true};
   SECTION("Sort 2 reverse ordered ranges") {
     // Add ranges.
     uint64_t data1[2] = {4, 5};
@@ -143,8 +143,7 @@ TEST_CASE("RangeSubset: Test numeric sort", "[range-manager][threadpool]") {
 
 TEST_CASE("RangeSubset::sort - STRING_ASCII") {
   Range range{};
-  RangeSubset<uint64_t, Datatype::STRING_ASCII, false> range_subset{range,
-                                                                    false};
+  RangeSubset range_subset{Datatype::STRING_ASCII, range, false, false};
   SECTION("Sort 2 reverse ordered non-overlapping ranges") {
     // Set ranges.
     const std::string d1{"cat"};
