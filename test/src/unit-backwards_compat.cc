@@ -198,7 +198,6 @@ TEST_CASE(
       .set_data_buffer("a", a_read)
       .set_coordinates(coords_read);
   query_r.submit();
-  array.close();
 
   // Note: If you encounter a failure here, in particular with a_read[0] == 100
   // (instead of 1), be sure non_split_coords_v1_4_0 has not become 'corrupt',
@@ -207,6 +206,8 @@ TEST_CASE(
   // corrupt can refresh from repository to correct initial state.
   for (int i = 0; i < 4; i++)
     REQUIRE(a_read[i] == i + 1);
+
+  array.close();
 }
 
 TEST_CASE(
@@ -272,6 +273,18 @@ TEST_CASE(
         uint8_t* validity = static_cast<uint8_t*>(malloc(sizeof(uint8_t)));
 
         switch (attr.second.type()) {
+          case TILEDB_BLOB: {
+            set_buffer_wrapper<std::byte>(
+                query,
+                attribute_name,
+                var_sized,
+                nullable,
+                offsets,
+                values,
+                validity,
+                &buffers);
+            break;
+          }
           case TILEDB_INT8: {
             set_buffer_wrapper<int8_t>(
                 query,
@@ -561,6 +574,12 @@ TEST_CASE(
 
         Attribute attribute = array->schema().attribute(buff.first);
         switch (attribute.type()) {
+          case TILEDB_BLOB: {
+            REQUIRE(
+                static_cast<std::byte*>(std::get<1>(buffer))[0] ==
+                static_cast<std::byte>(1));
+            break;
+          }
           case TILEDB_INT8: {
             REQUIRE(static_cast<int8_t*>(std::get<1>(buffer))[0] == 1);
             break;
@@ -746,6 +765,18 @@ TEST_CASE(
         uint8_t* validity = static_cast<uint8_t*>(malloc(sizeof(uint8_t)));
 
         switch (attr.second.type()) {
+          case TILEDB_BLOB: {
+            set_buffer_wrapper<std::byte>(
+                query,
+                attribute_name,
+                attr.second.variable_sized(),
+                attr.second.nullable(),
+                offsets,
+                values,
+                validity,
+                &buffers);
+            break;
+          }
           case TILEDB_INT8: {
             set_buffer_wrapper<int8_t>(
                 query,
@@ -1071,6 +1102,12 @@ TEST_CASE(
 
         Attribute attribute = array->schema().attribute(buff.first);
         switch (attribute.type()) {
+          case TILEDB_BLOB: {
+            REQUIRE(
+                static_cast<std::byte*>(std::get<1>(buffer))[0] ==
+                static_cast<std::byte>(1));
+            break;
+          }
           case TILEDB_INT8: {
             REQUIRE(static_cast<int8_t*>(std::get<1>(buffer))[0] == 1);
             break;

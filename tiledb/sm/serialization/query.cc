@@ -1,5 +1,5 @@
 /**
- * @file   query.cc
+ * @file query.cc
  *
  * @section LICENSE
  *
@@ -36,6 +36,8 @@
 #include <capnp/compat/json.h>
 #include <capnp/message.h>
 #include <capnp/serialize.h>
+#include "tiledb/sm/serialization/array.h"
+#include "tiledb/sm/serialization/array_schema.h"
 #include "tiledb/sm/serialization/capnp_utils.h"
 #endif
 // clang-format on
@@ -51,7 +53,8 @@
 #include "tiledb/sm/enums/query_type.h"
 #include "tiledb/sm/enums/serialization_type.h"
 #include "tiledb/sm/fragment/fragment_metadata.h"
-#include "tiledb/sm/misc/utils.h"
+#include "tiledb/sm/misc/hash.h"
+#include "tiledb/sm/misc/parse_argument.h"
 #include "tiledb/sm/query/query.h"
 #include "tiledb/sm/query/reader.h"
 #include "tiledb/sm/query/dense_reader.h"
@@ -123,22 +126,6 @@ Status stats_from_capnp(
       (*timers)[std::string(entry.getKey().cStr())] = entry.getValue();
     }
   }
-
-  return Status::Ok();
-}
-
-Status array_to_capnp(
-    const Array& array, capnp::Array::Builder* array_builder) {
-  array_builder->setStartTimestamp(array.timestamp_start());
-  array_builder->setEndTimestamp(array.timestamp_end());
-
-  return Status::Ok();
-}
-
-Status array_from_capnp(
-    const capnp::Array::Reader& array_reader, Array* array) {
-  RETURN_NOT_OK(array->set_timestamp_start(array_reader.getStartTimestamp()));
-  RETURN_NOT_OK(array->set_timestamp_end(array_reader.getEndTimestamp()));
 
   return Status::Ok();
 }
@@ -263,7 +250,7 @@ Status subarray_partitioner_to_capnp(
   // Subarray
   auto subarray_builder = builder->initSubarray();
   RETURN_NOT_OK(
-      subarray_to_capnp(schema, partitioner.subarray(), &subarray_builder));
+      subarray_to_capnp(schema, &partitioner.subarray(), &subarray_builder));
 
   // Per-attr/dim mem budgets
   const auto* budgets = partitioner.get_result_budgets();
@@ -380,7 +367,7 @@ Status subarray_partitioner_from_capnp(
 
   // Per-attr mem budgets
   if (reader.hasBudget()) {
-    const ArraySchema* schema = array->array_schema();
+    const ArraySchema* schema = array->array_schema_latest();
     auto mem_budgets_reader = reader.getBudget();
     auto num_attrs = mem_budgets_reader.size();
     for (size_t i = 0; i < num_attrs; i++) {
@@ -508,17 +495,6 @@ Status index_read_state_to_capnp(
   read_state_builder.setDoneAddingResultTiles(
       read_state->done_adding_result_tiles_);
 
-  auto rcs_builder = read_state_builder.initResultCellSlab(
-      read_state->result_cell_slabs_.size());
-  for (size_t i = 0; i < read_state->result_cell_slabs_.size(); ++i) {
-    rcs_builder[i].setFragIdx(
-        read_state->result_cell_slabs_[i].tile_->frag_idx());
-    rcs_builder[i].setTileIdx(
-        read_state->result_cell_slabs_[i].tile_->tile_idx());
-    rcs_builder[i].setStart(read_state->result_cell_slabs_[i].start_);
-    rcs_builder[i].setLength(read_state->result_cell_slabs_[i].length_);
-  }
-
   auto frag_tile_idx_builder =
       read_state_builder.initFragTileIdx(read_state->frag_tile_idx_.size());
   for (size_t i = 0; i < read_state->frag_tile_idx_.size(); ++i) {
@@ -583,44 +559,9 @@ Status index_read_state_from_capnp(
     const capnp::ReadStateIndex::Reader& read_state_reader,
     SparseIndexReaderBase* reader) {
   auto read_state = reader->read_state();
-  const auto* domain = schema->domain();
 
   read_state->done_adding_result_tiles_ =
       read_state_reader.getDoneAddingResultTiles();
-
-  // Only sparse global order reader has a result cell slab.
-  if (read_state_reader.hasResultCellSlab()) {
-    SparseGlobalOrderReader* sparse_global_order_reader =
-        (SparseGlobalOrderReader*)reader;
-    RETURN_NOT_OK(sparse_global_order_reader->clear_result_tiles());
-    read_state->result_cell_slabs_.clear();
-
-    std::unordered_map<
-        std::pair<unsigned, uint64_t>,
-        ResultTile*,
-        tiledb::sm::utils::hash::pair_hash>
-        result_tile_map;
-    for (const auto rcs : read_state_reader.getResultCellSlab()) {
-      auto start = rcs.getStart();
-      auto length = rcs.getLength();
-      auto frag_idx = rcs.getFragIdx();
-      auto tile_idx = rcs.getTileIdx();
-
-      ResultTile* rt = nullptr;
-      auto it = result_tile_map.find(
-          std::pair<unsigned, uint64_t>(frag_idx, tile_idx));
-      if (it != result_tile_map.end()) {
-        rt = it->second;
-      } else {
-        rt = sparse_global_order_reader->add_result_tile_unsafe(
-            frag_idx, tile_idx, domain);
-        result_tile_map.emplace(
-            std::pair<unsigned, uint64_t>(frag_idx, tile_idx), rt);
-      }
-
-      read_state->result_cell_slabs_.emplace_back(rt, start, length);
-    }
-  }
 
   assert(read_state_reader.hasFragTileIdx());
   read_state->frag_tile_idx_.clear();
@@ -1028,7 +969,10 @@ Status writer_from_capnp(
   return Status::Ok();
 }
 
-Status query_to_capnp(Query& query, capnp::Query::Builder* query_builder) {
+Status query_to_capnp(
+    Query& query,
+    capnp::Query::Builder* query_builder,
+    const bool client_side) {
   // For easy reference
   auto layout = query.layout();
   auto type = query.type();
@@ -1036,22 +980,22 @@ Status query_to_capnp(Query& query, capnp::Query::Builder* query_builder) {
 
   if (layout == Layout::GLOBAL_ORDER && query.type() == QueryType::WRITE)
     return LOG_STATUS(
-        Status::SerializationError("Cannot serialize; global order "
-                                   "serialization not supported for writes."));
+        Status_SerializationError("Cannot serialize; global order "
+                                  "serialization not supported for writes."));
 
   if (array == nullptr)
     return LOG_STATUS(
-        Status::SerializationError("Cannot serialize; array is null."));
+        Status_SerializationError("Cannot serialize; array is null."));
 
   const auto* schema = query.array_schema();
   if (schema == nullptr)
     return LOG_STATUS(
-        Status::SerializationError("Cannot serialize; array schema is null."));
+        Status_SerializationError("Cannot serialize; array schema is null."));
 
   const auto* domain = schema->domain();
   if (domain == nullptr)
     return LOG_STATUS(
-        Status::SerializationError("Cannot serialize; array domain is null."));
+        Status_SerializationError("Cannot serialize; array domain is null."));
 
   // Serialize basic fields
   query_builder->setType(query_type_str(type));
@@ -1061,7 +1005,7 @@ Status query_to_capnp(Query& query, capnp::Query::Builder* query_builder) {
   // Serialize array
   if (query.array() != nullptr) {
     auto builder = query_builder->initArray();
-    RETURN_NOT_OK(array_to_capnp(*array, &builder));
+    RETURN_NOT_OK(array_to_capnp(array, &builder, client_side));
   }
 
   // Serialize attribute buffer metadata
@@ -1126,15 +1070,10 @@ Status query_to_capnp(Query& query, capnp::Query::Builder* query_builder) {
         schema->allows_dups()) {
       auto builder = query_builder->initReaderIndex();
 
-      bool found = false;
-      bool non_overlapping_ranges = false;
-      RETURN_NOT_OK(query.config()->get<bool>(
-          "sm.query.sparse_unordered_with_dups.non_overlapping_ranges",
-          &non_overlapping_ranges,
-          &found));
-      assert(found);
+      auto&& [st, non_overlapping_ranges]{query.non_overlapping_ranges()};
+      RETURN_NOT_OK(st);
 
-      if (non_overlapping_ranges) {
+      if (*non_overlapping_ranges) {
         auto reader = (SparseUnorderedWithDupsReader<uint8_t>*)query.strategy();
 
         query_builder->setVarOffsetsMode(reader->offsets_mode());
@@ -1224,23 +1163,23 @@ Status query_from_capnp(
 
   const auto* schema = query->array_schema();
   if (schema == nullptr)
-    return LOG_STATUS(Status::SerializationError(
-        "Cannot deserialize; array schema is null."));
+    return LOG_STATUS(
+        Status_SerializationError("Cannot deserialize; array schema is null."));
 
   const auto* domain = schema->domain();
   if (domain == nullptr)
-    return LOG_STATUS(Status::SerializationError(
-        "Cannot deserialize; array domain is null."));
+    return LOG_STATUS(
+        Status_SerializationError("Cannot deserialize; array domain is null."));
 
   if (array == nullptr)
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize; array pointer is null."));
 
   // Deserialize query type (sanity check).
   QueryType query_type = QueryType::READ;
   RETURN_NOT_OK(query_type_enum(query_reader.getType().cStr(), &query_type));
   if (query_type != type)
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize; Query opened for " + query_type_str(type) +
         " but got serialized type for " + query_reader.getType().cStr()));
 
@@ -1264,7 +1203,7 @@ Status query_from_capnp(
 
   // Deserialize and set attribute buffers.
   if (!query_reader.hasAttributeBufferHeaders())
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize; no attribute buffer headers in message."));
 
   auto buffer_headers = query_reader.getAttributeBufferHeaders();
@@ -1416,7 +1355,7 @@ Status query_from_capnp(
           (var_size && offset_size_left >= fixedlen_size) || !var_size;
       const bool has_mem_for_validity = validity_size_left >= validitylen_size;
       if (!has_mem_for_data || !has_mem_for_offset || !has_mem_for_validity) {
-        return LOG_STATUS(Status::SerializationError(
+        return LOG_STATUS(Status_SerializationError(
             "Error deserializing read query; buffer too small for buffer "
             "'" +
             name + "'."));
@@ -1536,7 +1475,7 @@ Status query_from_capnp(
       // Always expect null buffers when deserializing.
       if (existing_buffer != nullptr || existing_offset_buffer != nullptr ||
           existing_validity_buffer != nullptr)
-        return LOG_STATUS(Status::SerializationError(
+        return LOG_STATUS(Status_SerializationError(
             "Error deserializing read query; unexpected "
             "buffer set on server-side."));
 
@@ -1725,17 +1664,12 @@ Status query_from_capnp(
       query->clear_strategy();
       RETURN_NOT_OK(query->set_layout_unsafe(layout));
 
-      bool found = false;
-      bool non_overlapping_ranges = false;
-      RETURN_NOT_OK(query->config()->get<bool>(
-          "sm.query.sparse_unordered_with_dups.non_overlapping_ranges",
-          &non_overlapping_ranges,
-          &found));
-      assert(found);
+      auto&& [st, non_overlapping_ranges]{query->non_overlapping_ranges()};
+      RETURN_NOT_OK(st);
 
       auto reader_reader = query_reader.getReaderIndex();
 
-      if (non_overlapping_ranges) {
+      if (*non_overlapping_ranges) {
         auto reader =
             (SparseUnorderedWithDupsReader<uint8_t>*)query->strategy();
 
@@ -1887,18 +1821,18 @@ Status query_serialize(
     bool clientside,
     BufferList* serialized_buffer) {
   if (serialize_type == SerializationType::JSON)
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize query; json format not supported."));
 
   const auto* array_schema = query->array_schema();
   if (array_schema == nullptr || query->array() == nullptr)
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize; array or array schema is null."));
 
   try {
     ::capnp::MallocMessageBuilder message;
     capnp::Query::Builder query_builder = message.initRoot<capnp::Query>();
-    RETURN_NOT_OK(query_to_capnp(*query, &query_builder));
+    RETURN_NOT_OK(query_to_capnp(*query, &query_builder, clientside));
 
     // Determine whether we should be serializing the buffer data.
     const bool serialize_buffers =
@@ -1967,15 +1901,15 @@ Status query_serialize(
         break;
       }
       default:
-        return LOG_STATUS(Status::SerializationError(
+        return LOG_STATUS(Status_SerializationError(
             "Cannot serialize; unknown serialization type"));
     }
   } catch (kj::Exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize; kj::Exception: " +
         std::string(e.getDescription().cStr())));
   } catch (std::exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize; exception: " + std::string(e.what())));
   }
 
@@ -1990,7 +1924,7 @@ Status do_query_deserialize(
     Query* query,
     ThreadPool* compute_tp) {
   if (serialize_type == SerializationType::JSON)
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize query; json format not supported."));
 
   try {
@@ -2011,7 +1945,7 @@ Status do_query_deserialize(
       case SerializationType::CAPNP: {
         // Capnp FlatArrayMessageReader requires 64-bit alignment.
         if (!utils::is_aligned<sizeof(uint64_t)>(serialized_buffer.cur_data()))
-          return LOG_STATUS(Status::SerializationError(
+          return LOG_STATUS(Status_SerializationError(
               "Could not deserialize query; buffer is not 8-byte aligned."));
 
         // Set traversal limit to 10GI (TODO: make this a config option)
@@ -2035,15 +1969,15 @@ Status do_query_deserialize(
             query_reader, context, buffer_start, copy_state, query, compute_tp);
       }
       default:
-        return LOG_STATUS(Status::SerializationError(
+        return LOG_STATUS(Status_SerializationError(
             "Cannot deserialize; unknown serialization type."));
     }
   } catch (kj::Exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize; kj::Exception: " +
         std::string(e.getDescription().cStr())));
   } catch (std::exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot deserialize; exception: " + std::string(e.what())));
   }
   return Status::Ok();
@@ -2219,15 +2153,15 @@ Status query_est_result_size_serialize(
         break;
       }
       default:
-        return LOG_STATUS(Status::SerializationError(
+        return LOG_STATUS(Status_SerializationError(
             "Cannot serialize; unknown serialization type"));
     }
   } catch (kj::Exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize; kj::Exception: " +
         std::string(e.getDescription().cStr())));
   } catch (std::exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Cannot serialize; exception: " + std::string(e.what())));
   }
 
@@ -2270,17 +2204,17 @@ Status query_est_result_size_deserialize(
       }
       default: {
         return LOG_STATUS(
-            Status::SerializationError("Error deserializing query est result "
-                                       "size; Unknown serialization type "
-                                       "passed"));
+            Status_SerializationError("Error deserializing query est result "
+                                      "size; Unknown serialization type "
+                                      "passed"));
       }
     }
   } catch (kj::Exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Error deserializing query est result size; kj::Exception: " +
         std::string(e.getDescription().cStr())));
   } catch (std::exception& e) {
-    return LOG_STATUS(Status::SerializationError(
+    return LOG_STATUS(Status_SerializationError(
         "Error deserializing query est result size; exception " +
         std::string(e.what())));
   }
@@ -2291,25 +2225,25 @@ Status query_est_result_size_deserialize(
 #else
 
 Status query_serialize(Query*, SerializationType, bool, BufferList*) {
-  return LOG_STATUS(Status::SerializationError(
+  return LOG_STATUS(Status_SerializationError(
       "Cannot serialize; serialization not enabled."));
 }
 
 Status query_deserialize(
     const Buffer&, SerializationType, bool, CopyState*, Query*, ThreadPool*) {
-  return LOG_STATUS(Status::SerializationError(
+  return LOG_STATUS(Status_SerializationError(
       "Cannot deserialize; serialization not enabled."));
 }
 
 Status query_est_result_size_serialize(
     Query*, SerializationType, bool, Buffer*) {
-  return LOG_STATUS(Status::SerializationError(
+  return LOG_STATUS(Status_SerializationError(
       "Cannot serialize; serialization not enabled."));
 }
 
 Status query_est_result_size_deserialize(
     Query*, SerializationType, bool, const Buffer&) {
-  return LOG_STATUS(Status::SerializationError(
+  return LOG_STATUS(Status_SerializationError(
       "Cannot deserialize; serialization not enabled."));
 }
 

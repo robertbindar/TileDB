@@ -36,10 +36,10 @@
 #include "tiledb/sm/c_api/tiledb_struct_def.h"
 #include "tiledb/sm/cpp_api/tiledb"
 #include "tiledb/sm/enums/encryption_type.h"
+#include "tiledb/sm/filesystem/uri.h"
 #include "tiledb/sm/global_state/unit_test_config.h"
 #include "tiledb/sm/misc/constants.h"
 #include "tiledb/sm/misc/tile_overlap.h"
-#include "tiledb/sm/misc/uri.h"
 
 std::mutex catch2_macro_mutex;
 
@@ -1234,6 +1234,21 @@ int32_t num_fragments(const std::string& array_name) {
   }
 
   return ret;
+}
+
+std::string random_string(const uint64_t l) {
+  static const char char_set[] =
+      "0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      "abcdefghijklmnopqrstuvwxyz";
+  std::string s;
+  s.reserve(l);
+
+  for (uint64_t i = 0; i < l; ++i) {
+    s += char_set[rand() % (sizeof(char_set) - 1)];
+  }
+
+  return s;
 }
 
 template void check_subarray<int8_t>(

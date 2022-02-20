@@ -119,6 +119,30 @@ typedef enum {
 #define TILEDB_DATATYPE_ENUM(id) TILEDB_##id
 #include "tiledb_enum.h"
 #undef TILEDB_DATATYPE_ENUM
+#ifdef TILEDB_CHAR
+#def TILEDB_CHAR_VAL TILEDB_CHAR
+#undef TILEDB_CHAR
+#define TILEDB_CHAR TILEDB_DEPRECATED TILEDB_CHAR_VAL
+#undef TILEDB_CHAR_VAL
+#endif
+#ifdef TILEDB_STRING_UCS2
+#def TILEDB_STRING_UCS2_VAL TILEDB_STRING_UCS2
+#undef TILEDB_STRING_UCS2
+#define TILEDB_STRING_UCS2 TILEDB_DEPRECATED TILEDB_STRING_UCS2_VAL
+#undef TILEDB_STRING_UCS2_VAL
+#endif
+#ifdef TILEDB_STRING_UCS4
+#def TILEDB_STRING_UCS4_VAL TILEDB_STRING_UCS4
+#undef TILEDB_STRING_UCS4
+#define TILEDB_STRING_UCS4 TILEDB_DEPRECATED TILEDB_STRING_UCS4_VAL
+#undef TILEDB_STRING_UCS4_VAL
+#endif
+#ifdef TILEDB_ANY
+#def TILEDB_ANY_VAL TILEDB_ANY
+#undef TILEDB_ANY
+#define TILEDB_ANY TILEDB_DEPRECATED TILEDB_ANY_VAL
+#undef TILEDB_ANY_VAL
+#endif
 } tiledb_datatype_t;
 
 /** Array type. */
@@ -440,6 +464,8 @@ tiledb_vfs_mode_from_str(const char* str, tiledb_vfs_mode_t* vfs_mode);
 #define TILEDB_ERR (-1)
 /** Out of memory */
 #define TILEDB_OOM (-2)
+/** Default compression level */
+#define TILEDB_COMPRESSION_FILTER_DEFAULT_LEVEL (-30000)
 /**@}*/
 
 /**
@@ -1052,7 +1078,7 @@ TILEDB_EXPORT void tiledb_config_free(tiledb_config_t** config);
  *    **Default**: bytes
  * - `sm.query.dense.reader` <br>
  *    Which reader to use for dense queries. "refactored" or "legacy".<br>
- *    **Default**: lagacy
+ *    **Default**: refactored
  * - `sm.query.sparse_global_order.reader` <br>
  *    Which reader to use for sparse global order queries. "refactored"
  *    or "legacy".<br>
@@ -1061,10 +1087,6 @@ TILEDB_EXPORT void tiledb_config_free(tiledb_config_t** config);
  *    Which reader to use for sparse unordered with dups queries.
  *    "refactored" or "legacy".<br>
  *    **Default**: refactored
- * - `sm.query.sparse_unordered_with_dups.non_overlapping_ranges` <br>
- *    Ensure ranges for sparse unordered with dups queries are not overlapping.
- *    "true" or "false".<br>
- *    **Default**: false
  * - `sm.mem.malloc_trim` <br>
  *    Should malloc_trim be called on context and query destruction? This might
  * reduce residual memory usage. <br>
@@ -1088,10 +1110,6 @@ TILEDB_EXPORT void tiledb_config_free(tiledb_config_t** config);
  *    Ratio of the budget allocated for array data in the sparse global
  *    order reader. <br>
  *    **Default**: 0.1
- * - `sm.mem.reader.sparse_global_order.ratio_rcs` <br>
- *    Ratio of the budget allocated for result cell slabs in the sparse
- *    global order reader. <br>
- *    **Default**: 0.05
  * - `sm.mem.reader.sparse_unordered_with_dups.ratio_coords` <br>
  *    Ratio of the budget allocated for coordinates in the sparse unordered
  *    with duplicates reader. <br>
@@ -1134,10 +1152,6 @@ TILEDB_EXPORT void tiledb_config_free(tiledb_config_t** config);
  *    The maximum number of parallel operations on objects with `file:///`
  *    URIs. <br>
  *    **Default**: `sm.io_concurrency_level`
- * - `vfs.file.enable_filelocks` <br>
- *    If set to `false`, file locking operations are no-ops for `file:///` URIs
- *    in VFS. <br>
- *    **Default**: `true`
  * - `vfs.azure.storage_account_name` <br>
  *    Set the Azure Storage Account name. <br>
  *    **Default**: ""
@@ -3004,6 +3018,24 @@ TILEDB_EXPORT int32_t tiledb_array_schema_get_allows_dups(
     tiledb_ctx_t* ctx, tiledb_array_schema_t* array_schema, int* allows_dups);
 
 /**
+ * Returns the array schema version.
+ *
+ * **Example:**
+ *
+ * @code{.c}
+ * uint32_t version;
+ * tiledb_array_schema_get_version(ctx, array_schema, &version);
+ * @endcode
+ *
+ * @param ctx The TileDB context.
+ * @param array_schema The array schema.
+ * @param version The version.
+ * @return `TILEDB_OK` for success and `TILEDB_ERR` for error.
+ */
+TILEDB_EXPORT int32_t tiledb_array_schema_get_version(
+    tiledb_ctx_t* ctx, tiledb_array_schema_t* array_schema, uint32_t* version);
+
+/**
  * Sets a domain for the array schema.
  *
  * **Example:**
@@ -3124,6 +3156,29 @@ TILEDB_EXPORT int32_t tiledb_array_schema_set_coords_filter_list(
  * @return `TILEDB_OK` for success and `TILEDB_ERR` for error.
  */
 TILEDB_EXPORT int32_t tiledb_array_schema_set_offsets_filter_list(
+    tiledb_ctx_t* ctx,
+    tiledb_array_schema_t* array_schema,
+    tiledb_filter_list_t* filter_list);
+
+/**
+ * Sets the filter list to use for the validity array of nullable attribute
+ * values.
+ *
+ * **Example:**
+ *
+ * @code{.c}
+ * tiledb_filter_list_t* filter_list;
+ * tiledb_filter_list_alloc(ctx, &filter_list);
+ * tiledb_filter_list_add_filter(ctx, filter_list, filter);
+ * tiledb_array_schema_set_validity_filter_list(ctx, array_schema, filter_list);
+ * @endcode
+ *
+ * @param ctx The TileDB context.
+ * @param array_schema The array schema.
+ * @param filter_list The filter list to be set.
+ * @return `TILEDB_OK` for success and `TILEDB_ERR` for error.
+ */
+TILEDB_EXPORT int32_t tiledb_array_schema_set_validity_filter_list(
     tiledb_ctx_t* ctx,
     tiledb_array_schema_t* array_schema,
     tiledb_filter_list_t* filter_list);
@@ -3300,6 +3355,27 @@ TILEDB_EXPORT int32_t tiledb_array_schema_get_coords_filter_list(
  * @return `TILEDB_OK` for success and `TILEDB_ERR` for error.
  */
 TILEDB_EXPORT int32_t tiledb_array_schema_get_offsets_filter_list(
+    tiledb_ctx_t* ctx,
+    tiledb_array_schema_t* array_schema,
+    tiledb_filter_list_t** filter_list);
+
+/**
+ * Retrieves the filter list used for validity maps.
+ *
+ * **Example:**
+ *
+ * @code{.c}
+ * tiledb_filter_list_t* filter_list;
+ * tiledb_array_schema_get_validity_filter_list(ctx, array_schema,
+ * &filter_list); tiledb_filter_list_free(ctx, &filter_list);
+ * @endcode
+ *
+ * @param ctx The TileDB context.
+ * @param array_schema The array schema.
+ * @param filter_list The filter list to be retrieved.
+ * @return `TILEDB_OK` for success and `TILEDB_ERR` for error.
+ */
+TILEDB_EXPORT int32_t tiledb_array_schema_get_validity_filter_list(
     tiledb_ctx_t* ctx,
     tiledb_array_schema_t* array_schema,
     tiledb_filter_list_t** filter_list);
@@ -3515,6 +3591,10 @@ TILEDB_EXPORT int32_t tiledb_query_get_stats(
 
 /**
  * Set the query config
+ *
+ * Setting the query config will also set the subarray configuration in order to
+ * maintain existing behavior. If you wish the subarray to have a different
+ * configuration than the query, set it after calling tiledb_query_set_config.
  *
  * Setting the configuration with this function overrides the following
  * Query-level parameters only:
@@ -5124,7 +5204,7 @@ TILEDB_EXPORT int32_t tiledb_subarray_alloc(
     tiledb_subarray_t** subarray);
 
 /**
- * Set the query config.
+ * Set the subarray config.
  *
  * Setting the configuration with this function overrides the following
  * Subarray-level parameters only:
@@ -7524,6 +7604,30 @@ TILEDB_EXPORT int32_t tiledb_fragment_info_alloc(
  */
 TILEDB_EXPORT void tiledb_fragment_info_free(
     tiledb_fragment_info_t** fragment_info);
+
+/**
+ * Set the fragment info config. Useful for passing timestamp ranges and
+ * encryption key via the config before loading the fragment info.
+ *
+ *  * **Example:**
+ *
+ * @code{.c}
+ * tiledb_fragment_info* fragment_info;
+ * tiledb_fragment_info_alloc(ctx, "array_uri", &fragment_info);
+ *
+ * tiledb_config_t* config;
+ * tiledb_error_t* error = NULL;
+ * tiledb_config_alloc(&config, &error);
+ * tiledb_config_set(config, "sm.tile_cache_size", "1000000", &error);
+ *
+ * tiledb_fragment_info_load(ctx, fragment_info);
+ * @endcode
+
+ */
+TILEDB_EXPORT int32_t tiledb_fragment_info_set_config(
+    tiledb_ctx_t* ctx,
+    tiledb_fragment_info_t* fragment_info,
+    tiledb_config_t* config);
 
 /**
  * Loads the fragment info.

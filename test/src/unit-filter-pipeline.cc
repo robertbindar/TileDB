@@ -78,6 +78,7 @@ class Add1InPlace : public tiledb::sm::Filter {
   }
 
   Status run_forward(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -100,6 +101,7 @@ class Add1InPlace : public tiledb::sm::Filter {
   }
 
   Status run_reverse(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -145,6 +147,7 @@ class Add1OutOfPlace : public tiledb::sm::Filter {
   }
 
   Status run_forward(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -178,6 +181,7 @@ class Add1OutOfPlace : public tiledb::sm::Filter {
   }
 
   Status run_reverse(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -234,6 +238,7 @@ class AddNInPlace : public tiledb::sm::Filter {
   }
 
   Status run_forward(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -255,6 +260,7 @@ class AddNInPlace : public tiledb::sm::Filter {
   }
 
   Status run_reverse(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -313,6 +319,7 @@ class PseudoChecksumFilter : public tiledb::sm::Filter {
   }
 
   Status run_forward(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -342,6 +349,7 @@ class PseudoChecksumFilter : public tiledb::sm::Filter {
   }
 
   Status run_reverse(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -363,7 +371,7 @@ class PseudoChecksumFilter : public tiledb::sm::Filter {
     }
 
     if (sum != input_sum)
-      return Status::FilterError("Filter error; sum does not match.");
+      return Status_FilterError("Filter error; sum does not match.");
 
     // The output metadata is just a view on the input metadata, skipping the
     // checksum bytes.
@@ -400,6 +408,7 @@ class Add1IncludingMetadataFilter : public tiledb::sm::Filter {
   }
 
   Status run_forward(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -453,6 +462,7 @@ class Add1IncludingMetadataFilter : public tiledb::sm::Filter {
   }
 
   Status run_reverse(
+      const Tile&,
       FilterBuffer* input_metadata,
       FilterBuffer* input,
       FilterBuffer* output_metadata,
@@ -461,7 +471,7 @@ class Add1IncludingMetadataFilter : public tiledb::sm::Filter {
     (void)config;
 
     if (input_metadata->size() != 2 * sizeof(uint32_t))
-      return Status::FilterError("Unexpected input metadata length");
+      return Status_FilterError("Unexpected input metadata length");
 
     uint32_t orig_input_size, orig_md_size;
     RETURN_NOT_OK(input_metadata->read(&orig_input_size, sizeof(uint32_t)));
@@ -510,7 +520,7 @@ class Add1IncludingMetadataFilter : public tiledb::sm::Filter {
   }
 };
 
-TEST_CASE("Filter: Test empty pipeline", "[filter]") {
+TEST_CASE("Filter: Test empty pipeline", "[filter][empty-pipeline]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -519,68 +529,193 @@ TEST_CASE("Filter: Test empty pipeline", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
   CHECK(tp.init(4).ok());
-  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
   // Check new size and number of chunks
-  CHECK(tile.buffer()->size() == 0);
+  CHECK(tile.size() == 0);
+
   CHECK(
-      tile.filtered_buffer()->size() ==
+      tile.filtered_buffer().size() ==
       nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-  tile.filtered_buffer()->reset_offset();
-  CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-  tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+  uint64_t offset = 0;
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      1);  // Number of chunks
+  offset += sizeof(uint64_t);
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk orig size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk filtered size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       0);  // First chunk metadata size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
 
   // Check all elements unchanged.
   for (uint64_t i = 0; i < nelts; i++) {
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == i);
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == i);
+    offset += sizeof(uint64_t);
   }
 
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  CHECK(tile.buffer() == &buffer);
-  CHECK(buffer.size() == nelts * sizeof(uint64_t));
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t i = 0; i < nelts; i++) {
     uint64_t elt = 0;
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    CHECK(elt == i);
+  }
+}
+
+TEST_CASE(
+    "Filter: Test empty pipeline var sized", "[filter][empty-pipeline][var]") {
+  tiledb::sm::Config config;
+
+  // Set up test data
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  Tile::set_max_tile_chunk_size(80);
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+            .ok());
+
+  // Check new size and number of chunks
+  CHECK(tile.size() == 0);
+  CHECK(
+      tile.filtered_buffer().size() ==
+      nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+  offset = 0;
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      9);  // Number of chunks
+  offset += sizeof(uint64_t);
+
+  uint64_t el = 0;
+  for (uint64_t i = 0; i < 9; i++) {
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk orig size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk filtered size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        0);  // Chunk metadata size
+    offset += sizeof(uint32_t);
+
+    // Check all elements unchanged.
+    for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == el++);
+      offset += sizeof(uint64_t);
+    }
+  }
+
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+  CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+  CHECK(tile.filtered_buffer().size() == 0);
+  for (uint64_t i = 0; i < nelts; i++) {
+    uint64_t elt = 0;
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == i);
   }
 
-  buffer.clear();
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test simple in-place pipeline", "[filter]") {
+TEST_CASE(
+    "Filter: Test simple in-place pipeline", "[filter][simple-in-place]") {
   tiledb::sm::Config config;
 
   const uint64_t nelts = 100;
@@ -588,19 +723,18 @@ TEST_CASE("Filter: Test simple in-place pipeline", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -608,44 +742,45 @@ TEST_CASE("Filter: Test simple in-place pipeline", "[filter]") {
   CHECK(pipeline.add_filter(Add1InPlace()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Check new size and number of chunks
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         0);  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Check all elements incremented.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 1));
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 1));
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -654,52 +789,235 @@ TEST_CASE("Filter: Test simple in-place pipeline", "[filter]") {
     // Add a few more +1 filters and re-run.
     CHECK(pipeline.add_filter(Add1InPlace()).ok());
     CHECK(pipeline.add_filter(Add1InPlace()).ok());
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Check new size and number of chunks
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         0);  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Check all elements incremented.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 3));
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 3));
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+}
+
+TEST_CASE(
+    "Filter: Test simple in-place pipeline var",
+    "[filter][simple-in-place][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(Add1InPlace()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          0);  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Check all elements incremented.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
 
-  buffer.clear();
+  SECTION("- Multi-stage") {
+    // Add a few more +1 filters and re-run.
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(Add1InPlace()).ok());
+    CHECK(pipeline.add_filter(Add1InPlace()).ok());
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          0);  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Check all elements incremented.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el + 2);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test simple out-of-place pipeline", "[filter]") {
+TEST_CASE(
+    "Filter: Test simple out-of-place pipeline",
+    "[filter][simple-out-of-place]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -708,19 +1026,18 @@ TEST_CASE("Filter: Test simple out-of-place pipeline", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -728,44 +1045,45 @@ TEST_CASE("Filter: Test simple out-of-place pipeline", "[filter]") {
   CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Check new size and number of chunks
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         0);  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Check all elements incremented.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 1));
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 1));
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -774,52 +1092,235 @@ TEST_CASE("Filter: Test simple out-of-place pipeline", "[filter]") {
     // Add a few more +1 filters and re-run.
     CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
     CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Check new size and number of chunks
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         0);  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Check all elements incremented.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 3));
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 3));
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+}
+
+TEST_CASE(
+    "Filter: Test simple out-of-place pipeline var",
+    "[filter][simple-out-of-place][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          0);  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Check all elements incremented.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
 
-  buffer.clear();
+  SECTION("- Multi-stage") {
+    // Add a few more +1 filters and re-run.
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+    CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          0);  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Check all elements incremented.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el + 2);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test mixed in- and out-of-place pipeline", "[filter]") {
+TEST_CASE(
+    "Filter: Test mixed in- and out-of-place pipeline",
+    "[filter][in-out-place]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -828,19 +1329,18 @@ TEST_CASE("Filter: Test mixed in- and out-of-place pipeline", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -849,48 +1349,176 @@ TEST_CASE("Filter: Test mixed in- and out-of-place pipeline", "[filter]") {
   CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
   CHECK(pipeline.add_filter(Add1InPlace()).ok());
   CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
-  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
-  CHECK(tile.buffer()->size() == 0);
+  CHECK(tile.size() == 0);
   CHECK(
-      tile.filtered_buffer()->size() ==
+      tile.filtered_buffer().size() ==
       nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * sizeof(uint32_t));
-  tile.filtered_buffer()->reset_offset();
-  CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-  tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+  uint64_t offset = 0;
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      1);  // Number of chunks
+  offset += sizeof(uint64_t);
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk orig size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk filtered size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       0);  // First chunk metadata size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
 
   // Check all elements incremented.
   for (uint64_t i = 0; i < nelts; i++) {
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 4));
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 4));
+    offset += sizeof(uint64_t);
   }
 
   // Set up test data
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  CHECK(tile.buffer() == &buffer);
-  CHECK(buffer.size() == nelts * sizeof(uint64_t));
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t i = 0; i < nelts; i++) {
     uint64_t elt = 0;
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    CHECK(elt == i);
+  }
+}
+
+TEST_CASE(
+    "Filter: Test mixed in- and out-of-place pipeline var",
+    "[filter][in-out-place][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  Tile::set_max_tile_chunk_size(80);
+  CHECK(pipeline.add_filter(Add1InPlace()).ok());
+  CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+  CHECK(pipeline.add_filter(Add1InPlace()).ok());
+  CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+            .ok());
+
+  // Check new size and number of chunks
+  CHECK(tile.size() == 0);
+  CHECK(
+      tile.filtered_buffer().size() ==
+      nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+  offset = 0;
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      9);  // Number of chunks
+  offset += sizeof(uint64_t);
+
+  uint64_t el = 0;
+  for (uint64_t i = 0; i < 9; i++) {
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk orig size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk filtered size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        0);  // Chunk metadata size
+    offset += sizeof(uint32_t);
+
+    // Check all elements incremented.
+    for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el + 3);
+      offset += sizeof(uint64_t);
+    }
+  }
+
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+  CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+  CHECK(tile.filtered_buffer().size() == 0);
+  for (uint64_t i = 0; i < nelts; i++) {
+    uint64_t elt = 0;
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == i);
   }
 
-  buffer.clear();
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
 TEST_CASE("Filter: Test compression", "[filter][compression]") {
@@ -901,19 +1529,18 @@ TEST_CASE("Filter: Test compression", "[filter][compression]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   // Set up dummy array schema (needed by compressor filter for cell size, etc).
   uint32_t dim_dom[] = {1, 10};
@@ -937,21 +1564,20 @@ TEST_CASE("Filter: Test compression", "[filter][compression]") {
     CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
               .ok());
 
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
     // Check compression worked
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() < nelts * sizeof(uint64_t));
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() < nelts * sizeof(uint64_t));
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer()->size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
 
     // Check all elements original values.
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -961,21 +1587,20 @@ TEST_CASE("Filter: Test compression", "[filter][compression]") {
     CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
               .ok());
 
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
     // Check compression worked
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() < nelts * sizeof(uint64_t));
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() < nelts * sizeof(uint64_t));
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer()->size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
 
     // Check all elements original values.
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -987,29 +1612,197 @@ TEST_CASE("Filter: Test compression", "[filter][compression]") {
     CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
               .ok());
 
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
     // Check compression worked
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() < nelts * sizeof(uint64_t));
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() < nelts * sizeof(uint64_t));
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer()->size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
 
     // Check all elements original values.
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+}
+
+TEST_CASE("Filter: Test compression var", "[filter][compression][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  // Set up dummy array schema (needed by compressor filter for cell size, etc).
+  uint32_t dim_dom[] = {1, 10};
+  tiledb::sm::Dimension dim{"", Datatype::INT32};
+  dim.set_domain(dim_dom);
+  tiledb::sm::Domain domain;
+  domain.add_dimension(&dim);
+  tiledb::sm::ArraySchema schema;
+  tiledb::sm::Attribute attr("attr", Datatype::UINT64);
+  schema.add_attribute(&attr);
+  schema.set_domain(&domain);
+  schema.init();
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+
+  SECTION("- Simple") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(Add1InPlace()).ok());
+    CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+    CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
+              .ok());
+
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    // Check number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(0) ==
+        9);  // Number of chunks
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+
+    // Check all elements original values.
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
 
-  buffer.clear();
+  SECTION("- With checksum stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
+    CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
+              .ok());
+
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    // Check number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(0) ==
+        9);  // Number of chunks
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+
+    // Check all elements original values.
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  SECTION("- With multiple stages") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(Add1InPlace()).ok());
+    CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
+    CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+    CHECK(pipeline.add_filter(CompressionFilter(tiledb::sm::Compressor::LZ4, 5))
+              .ok());
+
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    // Check number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(0) ==
+        9);  // Number of chunks
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+
+    // Check all elements original values.
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test pseudo-checksum", "[filter]") {
+TEST_CASE("Filter: Test pseudo-checksum", "[filter][pseudo-checksum]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1019,19 +1812,18 @@ TEST_CASE("Filter: Test pseudo-checksum", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1039,49 +1831,52 @@ TEST_CASE("Filter: Test pseudo-checksum", "[filter]") {
   CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Check new size and number of chunks
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
             3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         sizeof(uint64_t));  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Checksum
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == expected_checksum);
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        expected_checksum);
+    offset += sizeof(uint64_t);
 
     // Check all elements are the same.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == i);
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == i);
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -1090,7 +1885,8 @@ TEST_CASE("Filter: Test pseudo-checksum", "[filter]") {
     CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
     CHECK(pipeline.add_filter(Add1InPlace()).ok());
     CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Compute the second (final) checksum value.
     uint64_t expected_checksum_2 = 0;
@@ -1098,58 +1894,265 @@ TEST_CASE("Filter: Test pseudo-checksum", "[filter]") {
       expected_checksum_2 += i + 2;
 
     // Check new size and number of chunks.
-    CHECK(tile.buffer()->size() == 0);
+    CHECK(tile.size() == 0);
     CHECK(
-        tile.filtered_buffer()->size() ==
+        tile.filtered_buffer().size() ==
         nelts * sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
             sizeof(uint64_t) + 3 * sizeof(uint32_t));
-    tile.filtered_buffer()->reset_offset();
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+
+    uint64_t offset = 0;
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        1);  // Number of chunks
+    offset += sizeof(uint64_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         2 * sizeof(uint64_t));  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     // Outer checksum
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == expected_checksum_2);
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        expected_checksum_2);
+    offset += sizeof(uint64_t);
 
     // Inner checksum
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == expected_checksum);
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        expected_checksum);
+    offset += sizeof(uint64_t);
 
     // Check all elements are correct.
     for (uint64_t i = 0; i < nelts; i++) {
-      CHECK(tile.filtered_buffer()->value<uint64_t>() == i + 2);
-      tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == i + 2);
+      offset += sizeof(uint64_t);
     }
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+}
+
+TEST_CASE(
+    "Filter: Test pseudo-checksum var", "[filter][pseudo-checksum][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  std::vector<uint64_t> expected_checksums{
+      91, 99, 275, 238, 425, 525, 1350, 825, 1122};
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t) +
+            9 * sizeof(uint64_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          sizeof(uint64_t));  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Checksum
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+          expected_checksums[i]);
+      offset += sizeof(uint64_t);
+
+      // Check all elements are the same.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == el++);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
 
-  buffer.clear();
+  SECTION("- Multi-stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.add_filter(Add1OutOfPlace()).ok());
+    CHECK(pipeline.add_filter(Add1InPlace()).ok());
+    CHECK(pipeline.add_filter(PseudoChecksumFilter()).ok());
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    std::vector<uint64_t> expected_checksums2{
+        119, 111, 297, 252, 445, 545, 1390, 845, 1146};
+
+    // Check new size and number of chunks
+    CHECK(tile.size() == 0);
+    CHECK(
+        tile.filtered_buffer().size() ==
+        nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t) +
+            2 * 9 * sizeof(uint64_t));
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t el = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          2 * sizeof(uint64_t));  // Chunk metadata size
+      offset += sizeof(uint32_t);
+
+      // Checksums
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+          expected_checksums2[i]);
+      offset += sizeof(uint64_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+          expected_checksums[i]);
+      offset += sizeof(uint64_t);
+
+      // Check all elements are incremented.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el + 1);
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test pipeline modify filter", "[filter]") {
+TEST_CASE("Filter: Test pipeline modify filter", "[filter][modify]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1158,19 +2161,18 @@ TEST_CASE("Filter: Test pipeline modify filter", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1188,48 +2190,183 @@ TEST_CASE("Filter: Test pipeline modify filter", "[filter]") {
   CHECK(add_n != nullptr);
   add_n->set_increment(2);
 
-  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
-  CHECK(tile.buffer()->size() == 0);
-  CHECK(tile.filtered_buffer()->size() != 0);
-  tile.filtered_buffer()->reset_offset();
-  CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-  tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+  CHECK(tile.size() == 0);
+  CHECK(tile.filtered_buffer().size() != 0);
+
+  uint64_t offset = 0;
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      1);  // Number of chunks
+  offset += sizeof(uint64_t);
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk orig size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk filtered size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       0);  // First chunk metadata size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
 
   // Check all elements incremented.
   for (uint64_t i = 0; i < nelts; i++) {
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 4));
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 4));
+    offset += sizeof(uint64_t);
   }
 
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  CHECK(tile.buffer() == &buffer);
-  CHECK(buffer.size() == nelts * sizeof(uint64_t));
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t i = 0; i < nelts; i++) {
     uint64_t elt = 0;
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    CHECK(elt == i);
+  }
+}
+
+TEST_CASE("Filter: Test pipeline modify filter var", "[filter][modify][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(Add1InPlace()).ok());
+  CHECK(pipeline.add_filter(AddNInPlace()).ok());
+  CHECK(pipeline.add_filter(Add1InPlace()).ok());
+
+  // Get non-existent filter instance
+  auto* cksum = pipeline.get_filter<PseudoChecksumFilter>();
+  CHECK(cksum == nullptr);
+
+  // Modify +N filter
+  auto* add_n = pipeline.get_filter<AddNInPlace>();
+  CHECK(add_n != nullptr);
+  add_n->set_increment(2);
+
+  Tile::set_max_tile_chunk_size(80);
+  CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+            .ok());
+
+  // Check new size and number of chunks
+  CHECK(tile.size() == 0);
+  CHECK(
+      tile.filtered_buffer().size() ==
+      nelts * sizeof(uint64_t) + sizeof(uint64_t) + 3 * 9 * sizeof(uint32_t));
+
+  offset = 0;
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      9);  // Number of chunks
+  offset += sizeof(uint64_t);
+
+  uint64_t el = 0;
+  for (uint64_t i = 0; i < 9; i++) {
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk orig size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        out_sizes[i]);  // Chunk filtered size
+    offset += sizeof(uint32_t);
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+        0);  // Chunk metadata size
+    offset += sizeof(uint32_t);
+
+    // Check all elements are incremented.
+    for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+      CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == ++el + 3);
+      offset += sizeof(uint64_t);
+    }
+  }
+
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+  CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+  CHECK(tile.filtered_buffer().size() == 0);
+  for (uint64_t i = 0; i < nelts; i++) {
+    uint64_t elt = 0;
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == i);
   }
 
-  buffer.clear();
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
-TEST_CASE("Filter: Test pipeline copy", "[filter]") {
+TEST_CASE("Filter: Test pipeline copy", "[filter][copy]") {
   tiledb::sm::Config config;
 
   const uint64_t expected_checksum = 5350;
@@ -1239,19 +2376,18 @@ TEST_CASE("Filter: Test pipeline copy", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1275,52 +2411,53 @@ TEST_CASE("Filter: Test pipeline copy", "[filter]") {
   CHECK(add_n_2 != nullptr);
   CHECK(add_n_2->increment() == 2);
 
-  CHECK(pipeline_copy.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+  CHECK(pipeline_copy.run_forward(&test::g_helper_stats, &tile, nullptr, &tp)
+            .ok());
 
-  CHECK(tile.buffer()->size() == 0);
-  CHECK(tile.filtered_buffer()->size() != 0);
-  tile.filtered_buffer()->reset_offset();
-  CHECK(tile.filtered_buffer()->value<uint64_t>() == 1);  // Number of chunks
-  tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+  CHECK(tile.size() == 0);
+  CHECK(tile.filtered_buffer().size() != 0);
+
+  uint64_t offset = 0;
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      1);  // Number of chunks
+  offset += sizeof(uint64_t);
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk orig size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       nelts * sizeof(uint64_t));  // First chunk filtered size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
   CHECK(
-      tile.filtered_buffer()->value<uint32_t>() ==
+      tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
       sizeof(uint64_t));  // First chunk metadata size
-  tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+  offset += sizeof(uint32_t);
 
   // Checksum
-  CHECK(tile.filtered_buffer()->value<uint64_t>() == expected_checksum);
-  tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+  CHECK(
+      tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+      expected_checksum);
+  offset += sizeof(uint64_t);
 
   // Check all elements incremented.
   for (uint64_t i = 0; i < nelts; i++) {
-    CHECK(tile.filtered_buffer()->value<uint64_t>() == (i + 4));
-    tile.filtered_buffer()->advance_offset(sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().value_at_as<uint64_t>(offset) == (i + 4));
+    offset += sizeof(uint64_t);
   }
 
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  CHECK(tile.buffer() == &buffer);
-  CHECK(buffer.size() == nelts * sizeof(uint64_t));
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t i = 0; i < nelts; i++) {
     uint64_t elt = 0;
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == i);
   }
-
-  buffer.clear();
 }
 
-TEST_CASE("Filter: Test random pipeline", "[filter]") {
+TEST_CASE("Filter: Test random pipeline", "[filter][random]") {
   tiledb::sm::Config config;
 
   const uint64_t nelts = 100;
@@ -1328,19 +2465,18 @@ TEST_CASE("Filter: Test random pipeline", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   EncryptionKey encryption_key;
   REQUIRE(encryption_key
@@ -1404,22 +2540,19 @@ TEST_CASE("Filter: Test random pipeline", "[filter]") {
     }
 
     // End result should always be the same as the input.
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    auto* buffer = tile.buffer();
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t n = 0; n < nelts; n++) {
       uint64_t elt = 0;
-      buffer->set_offset(n * sizeof(uint64_t));
-      CHECK(buffer->read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, n * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == n);
     }
   }
-
-  buffer.clear();
 }
 
 TEST_CASE(
@@ -1433,19 +2566,18 @@ TEST_CASE(
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   // MD5
   FilterPipeline md5_pipeline;
@@ -1453,18 +2585,17 @@ TEST_CASE(
   CHECK(tp.init(4).ok());
   ChecksumMD5Filter md5_filter;
   CHECK(md5_pipeline.add_filter(md5_filter).ok());
-  CHECK(md5_pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-  CHECK(tile.buffer()->size() == 0);
-  CHECK(tile.filtered_buffer()->size() != 0);
+  CHECK(md5_pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp)
+            .ok());
+  CHECK(tile.size() == 0);
+  CHECK(tile.filtered_buffer().size() != 0);
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(
       md5_pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  auto* internal_buffer = tile.buffer();
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t n = 0; n < nelts; n++) {
     uint64_t elt = 0;
-    internal_buffer->set_offset(n * sizeof(uint64_t));
-    CHECK(internal_buffer->read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, n * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == n);
   }
 
@@ -1472,25 +2603,22 @@ TEST_CASE(
   FilterPipeline sha_256_pipeline;
   ChecksumMD5Filter sha_256_filter;
   CHECK(sha_256_pipeline.add_filter(sha_256_filter).ok());
-  CHECK(sha_256_pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-  CHECK(tile.buffer()->size() == 0);
-  CHECK(tile.filtered_buffer()->size() != 0);
+  CHECK(sha_256_pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp)
+            .ok());
+  CHECK(tile.size() == 0);
+  CHECK(tile.filtered_buffer().size() != 0);
+  CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
   CHECK(sha_256_pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config)
             .ok());
-  CHECK(tile.buffer()->size() != 0);
-  CHECK(tile.filtered_buffer()->size() == 0);
-  internal_buffer = tile.buffer();
+  CHECK(tile.filtered_buffer().size() == 0);
   for (uint64_t n = 0; n < nelts; n++) {
     uint64_t elt = 0;
-    internal_buffer->set_offset(n * sizeof(uint64_t));
-    CHECK(internal_buffer->read(&elt, sizeof(uint64_t)).ok());
+    CHECK(tile.read(&elt, n * sizeof(uint64_t), sizeof(uint64_t)).ok());
     CHECK(elt == n);
   }
-
-  buffer.clear();
 }
 
-TEST_CASE("Filter: Test bit width reduction", "[filter]") {
+TEST_CASE("Filter: Test bit width reduction", "[filter][bit-width-reduction]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1499,19 +2627,18 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1519,26 +2646,23 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
   CHECK(pipeline.add_filter(BitWidthReductionFilter()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
 
     // Sanity check number of windows value
-    tile.filtered_buffer()->reset_offset();
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint64_t));  // Number of chunks
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint32_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint32_t));  // First chunk filtered size
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint32_t));  // First chunk metadata size
+    uint64_t offset = 0;
+    offset += sizeof(uint64_t);  // Number of chunks
+    offset += sizeof(uint32_t);  // First chunk orig size
+    offset += sizeof(uint32_t);  // First chunk filtered size
+    offset += sizeof(uint32_t);  // First chunk metadata size
 
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         nelts * sizeof(uint64_t));  // Original length
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
     auto max_win_size =
         pipeline.get_filter<BitWidthReductionFilter>()->max_window_size();
@@ -1546,22 +2670,19 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
         (nelts * sizeof(uint64_t)) / max_win_size +
         uint32_t(bool((nelts * sizeof(uint64_t)) % max_win_size));
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         expected_num_win);  // Number of windows
 
     // Check compression worked
-    auto compressed_size = tile.filtered_buffer()->size();
+    auto compressed_size = tile.filtered_buffer().size();
     CHECK(compressed_size < nelts * sizeof(uint64_t));
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -1573,19 +2694,17 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
       pipeline.get_filter<BitWidthReductionFilter>()->set_max_window_size(
           window_size);
 
-      CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-      CHECK(tile.buffer()->size() == 0);
-      CHECK(tile.filtered_buffer()->size() != 0);
+      CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp)
+                .ok());
+      CHECK(tile.size() == 0);
+      CHECK(tile.filtered_buffer().size() != 0);
+      CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
       CHECK(
           pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-      CHECK(tile.buffer()->size() != 0);
-      CHECK(tile.filtered_buffer()->size() == 0);
-      CHECK(tile.buffer() == &buffer);
-      CHECK(buffer.size() == nelts * sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().size() == 0);
       for (uint64_t i = 0; i < nelts; i++) {
         uint64_t elt = 0;
-        buffer.set_offset(i * sizeof(uint64_t));
-        CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+        CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
         CHECK(elt == i);
       }
     }
@@ -1598,37 +2717,32 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
     std::uniform_int_distribution<> rng(0, std::numeric_limits<int32_t>::max());
     INFO("Random element seed: " << seed);
 
-    Buffer buffer;
-    buffer.realloc(tile_size);
-    CHECK(buffer.size() == 0);
-    CHECK(buffer.alloced_size() == tile_size);
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size,
+        cell_size,
+        dim_num);
 
     // Set up test data
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t val = (uint64_t)rng(gen);
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.write(&val, sizeof(uint64_t)).ok());
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     }
-    CHECK(buffer.size() == tile_size);
 
-    Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
-
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK((int64_t)elt == rng(gen_copy));
     }
-
-    buffer.clear();
   }
 
   SECTION(" - Random signed values") {
@@ -1642,77 +2756,366 @@ TEST_CASE("Filter: Test bit width reduction", "[filter]") {
 
     const uint64_t tile_size2 = nelts * sizeof(uint32_t);
 
-    Buffer buffer;
-    buffer.realloc(tile_size2);
-    CHECK(buffer.size() == 0);
-    CHECK(buffer.alloced_size() == tile_size2);
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size2,
+        cell_size,
+        dim_num);
 
     // Set up test data
     for (uint64_t i = 0; i < nelts; i++) {
-      int32_t val = (int32_t)rng(gen);
-      buffer.set_offset(i * sizeof(int32_t));
-      CHECK(buffer.write(&val, sizeof(int32_t)).ok());
+      uint64_t val = (uint32_t)rng(gen);
+      CHECK(tile.write(&val, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
     }
-    CHECK(buffer.size() == tile_size2);
 
-    Tile tile(Datatype::INT32, cell_size, dim_num, &buffer, false);
-
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint32_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint32_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       int32_t elt = 0;
-      buffer.set_offset(i * sizeof(int32_t));
-      CHECK(buffer.read(&elt, sizeof(int32_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(int32_t), sizeof(int32_t)).ok());
       CHECK(elt == rng(gen_copy));
     }
-
-    buffer.clear();
   }
 
   SECTION("- Byte overflow") {
-    Buffer buffer;
-    buffer.realloc(tile_size);
-    CHECK(buffer.size() == 0);
-    CHECK(buffer.alloced_size() == tile_size);
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size,
+        cell_size,
+        dim_num);
 
     // Set up test data
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t val = i % 257;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.write(&val, sizeof(uint64_t)).ok());
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     }
-    CHECK(buffer.size() == tile_size);
 
-    Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
-
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i % 257);
     }
-
-    buffer.clear();
   }
-
-  buffer.clear();
 }
 
-TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
+TEST_CASE(
+    "Filter: Test bit width reduction var",
+    "[filter][bit-width-reduction][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(BitWidthReductionFilter()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i] / 8);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+
+      uint32_t md_size = tile.filtered_buffer().value_at_as<uint32_t>(offset);
+      offset += sizeof(uint32_t);
+
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Original length
+      offset += sizeof(uint32_t);
+
+      // Check window value.
+      auto max_win_size =
+          pipeline.get_filter<BitWidthReductionFilter>()->max_window_size();
+      auto expected_num_win = out_sizes[i] / max_win_size +
+                              uint32_t(bool(out_sizes[0] % max_win_size));
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          expected_num_win);  // Number of windows
+
+      offset += md_size - sizeof(uint32_t);
+
+      // Check all elements are good.
+      uint8_t el = 0;
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(tile.filtered_buffer().value_at_as<uint8_t>(offset) == el++);
+        offset += sizeof(uint8_t);
+      }
+    }
+
+    // Check compression worked
+    auto compressed_size = tile.filtered_buffer().size();
+    CHECK(compressed_size < nelts * sizeof(uint64_t));
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  SECTION("- Window sizes") {
+    Tile::set_max_tile_chunk_size(80);
+    std::vector<uint32_t> window_sizes = {
+        32, 64, 128, 256, 437, 512, 1024, 2000};
+    for (auto window_size : window_sizes) {
+      pipeline.get_filter<BitWidthReductionFilter>()->set_max_window_size(
+          window_size);
+
+      CHECK(
+          pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+      CHECK(tile.size() == 0);
+      CHECK(tile.filtered_buffer().size() != 0);
+      CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+      CHECK(
+          pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+      CHECK(tile.filtered_buffer().size() == 0);
+      for (uint64_t i = 0; i < nelts; i++) {
+        uint64_t elt = 0;
+        CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+        CHECK(elt == i);
+      }
+    }
+  }
+
+  SECTION("- Random values") {
+    Tile::set_max_tile_chunk_size(80);
+    std::random_device rd;
+    auto seed = rd();
+    std::mt19937 gen(seed), gen_copy(seed);
+    std::uniform_int_distribution<> rng(0, std::numeric_limits<int32_t>::max());
+    INFO("Random element seed: " << seed);
+
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size,
+        cell_size,
+        dim_num);
+
+    // Set up test data
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t val = (uint64_t)rng(gen);
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    }
+
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK((int64_t)elt == rng(gen_copy));
+    }
+  }
+
+  SECTION(" - Random signed values") {
+    Tile::set_max_tile_chunk_size(80);
+    std::random_device rd;
+    auto seed = rd();
+    std::mt19937 gen(seed), gen_copy(seed);
+    std::uniform_int_distribution<> rng(
+        std::numeric_limits<int32_t>::lowest(),
+        std::numeric_limits<int32_t>::max());
+    INFO("Random element seed: " << seed);
+
+    const uint64_t tile_size2 = nelts * sizeof(uint32_t);
+
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size2,
+        cell_size,
+        dim_num);
+
+    // Set up test data
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t val = (uint32_t)rng(gen);
+      CHECK(tile.write(&val, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
+    }
+
+    std::vector<uint64_t> offsets32(offsets);
+    for (uint64_t i = 0; i < offsets32.size(); i++) {
+      offsets32[i] /= 2;
+    }
+
+    Tile offsets_tile32;
+    offsets_tile32.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        offsets_tile_size,
+        constants::cell_var_offset_size,
+        dim_num);
+
+    // Set up test data
+    for (uint64_t i = 0; i < offsets.size(); i++) {
+      CHECK(offsets_tile32
+                .write(
+                    &offsets32[i],
+                    i * constants::cell_var_offset_size,
+                    constants::cell_var_offset_size)
+                .ok());
+    }
+
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile32, &tp)
+            .ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint32_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      int32_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(int32_t), sizeof(int32_t)).ok());
+      CHECK(elt == rng(gen_copy));
+    }
+  }
+
+  SECTION("- Byte overflow") {
+    Tile::set_max_tile_chunk_size(80);
+    Tile tile;
+    tile.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT64,
+        tile_size,
+        cell_size,
+        dim_num);
+
+    // Set up test data
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t val = i % 257;
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    }
+
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i % 257);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
+}
+
+TEST_CASE("Filter: Test positive-delta encoding", "[filter][positive-delta]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1721,19 +3124,18 @@ TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1741,23 +3143,21 @@ TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
   CHECK(pipeline.add_filter(PositiveDeltaFilter()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
 
     auto pipeline_metadata_size = sizeof(uint64_t) + 3 * sizeof(uint32_t);
 
-    tile.filtered_buffer()->reset_offset();
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint64_t));  // Number of chunks
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint32_t));  // First chunk orig size
-    tile.filtered_buffer()->advance_offset(
-        sizeof(uint32_t));  // First chunk filtered size
-    auto filter_metadata_size =
-        tile.filtered_buffer()->value<uint32_t>();  // First chunk metadata size
-    tile.filtered_buffer()->advance_offset(sizeof(uint32_t));
+    uint64_t offset = 0;
+    offset += sizeof(uint64_t);  // Number of chunks
+    offset += sizeof(uint32_t);  // First chunk orig size
+    offset += sizeof(uint32_t);  // First chunk filtered size
+    auto filter_metadata_size = tile.filtered_buffer().value_at_as<uint32_t>(
+        offset);  // First chunk metadata size
+    offset += sizeof(uint32_t);
 
     auto max_win_size =
         pipeline.get_filter<PositiveDeltaFilter>()->max_window_size();
@@ -1765,24 +3165,21 @@ TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
         (nelts * sizeof(uint64_t)) / max_win_size +
         uint32_t(bool((nelts * sizeof(uint64_t)) % max_win_size));
     CHECK(
-        tile.filtered_buffer()->value<uint32_t>() ==
+        tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
         expected_num_win);  // Number of windows
 
     // Check encoded size
-    auto encoded_size = tile.filtered_buffer()->size();
+    auto encoded_size = tile.filtered_buffer().size();
     CHECK(
         encoded_size == pipeline_metadata_size + filter_metadata_size +
                             nelts * sizeof(uint64_t));
 
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -1794,19 +3191,17 @@ TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
       pipeline.get_filter<PositiveDeltaFilter>()->set_max_window_size(
           window_size);
 
-      CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-      CHECK(tile.buffer()->size() == 0);
-      CHECK(tile.filtered_buffer()->size() != 0);
+      CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp)
+                .ok());
+      CHECK(tile.size() == 0);
+      CHECK(tile.filtered_buffer().size() != 0);
+      CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
       CHECK(
           pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-      CHECK(tile.buffer()->size() != 0);
-      CHECK(tile.filtered_buffer()->size() == 0);
-      CHECK(tile.buffer() == &buffer);
-      CHECK(buffer.size() == nelts * sizeof(uint64_t));
+      CHECK(tile.filtered_buffer().size() == 0);
       for (uint64_t i = 0; i < nelts; i++) {
         uint64_t elt = 0;
-        buffer.set_offset(i * sizeof(uint64_t));
-        CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+        CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
         CHECK(elt == i);
       }
     }
@@ -1815,17 +3210,199 @@ TEST_CASE("Filter: Test positive-delta encoding", "[filter]") {
   SECTION("- Error on non-positive delta data") {
     for (uint64_t i = 0; i < nelts; i++) {
       auto val = nelts - i;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.write(&val, sizeof(uint64_t)).ok());
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
     }
 
-    CHECK(!pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        !pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
   }
-
-  buffer.clear();
 }
 
-TEST_CASE("Filter: Test bitshuffle", "[filter]") {
+TEST_CASE(
+    "Filter: Test positive-delta encoding var",
+    "[filter][positive-delta][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(PositiveDeltaFilter()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+
+    uint64_t offset = 0;
+    CHECK(
+        tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+        9);  // Number of chunks
+    offset += sizeof(uint64_t);
+
+    uint64_t total_md_size = 0;
+    for (uint64_t i = 0; i < 9; i++) {
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk orig size
+      offset += sizeof(uint32_t);
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          out_sizes[i]);  // Chunk filtered size
+      offset += sizeof(uint32_t);
+
+      uint32_t md_size = tile.filtered_buffer().value_at_as<uint32_t>(offset);
+      offset += sizeof(uint32_t);
+      total_md_size += md_size;
+
+      auto max_win_size =
+          pipeline.get_filter<PositiveDeltaFilter>()->max_window_size();
+      auto expected_num_win =
+          (nelts * sizeof(uint64_t)) / max_win_size +
+          uint32_t(bool((nelts * sizeof(uint64_t)) % max_win_size));
+      CHECK(
+          tile.filtered_buffer().value_at_as<uint32_t>(offset) ==
+          expected_num_win);  // Number of windows
+
+      offset += md_size;
+
+      // Check all elements are good.
+      for (uint64_t j = 0; j < out_sizes[i] / sizeof(uint64_t); j++) {
+        CHECK(
+            tile.filtered_buffer().value_at_as<uint64_t>(offset) ==
+            (j == 0 ? 0 : 1));
+        offset += sizeof(uint64_t);
+      }
+    }
+
+    // Check encoded size
+    auto pipeline_metadata_size = sizeof(uint64_t) + 9 * 3 * sizeof(uint32_t);
+    auto encoded_size = tile.filtered_buffer().size();
+    CHECK(
+        encoded_size ==
+        pipeline_metadata_size + total_md_size + nelts * sizeof(uint64_t));
+
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  SECTION("- Window sizes") {
+    Tile::set_max_tile_chunk_size(80);
+    std::vector<uint32_t> window_sizes = {
+        32, 64, 128, 256, 437, 512, 1024, 2000};
+    for (auto window_size : window_sizes) {
+      pipeline.get_filter<PositiveDeltaFilter>()->set_max_window_size(
+          window_size);
+
+      CHECK(
+          pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+      CHECK(tile.size() == 0);
+      CHECK(tile.filtered_buffer().size() != 0);
+      CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+      CHECK(
+          pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+      CHECK(tile.filtered_buffer().size() == 0);
+      for (uint64_t i = 0; i < nelts; i++) {
+        uint64_t elt = 0;
+        CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+        CHECK(elt == i);
+      }
+    }
+  }
+
+  SECTION("- Error on non-positive delta data") {
+    Tile::set_max_tile_chunk_size(80);
+    for (uint64_t i = 0; i < nelts; i++) {
+      auto val = nelts - i;
+      CHECK(tile.write(&val, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+    }
+
+    CHECK(
+        !pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+             .ok());
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
+}
+
+TEST_CASE("Filter: Test bitshuffle", "[filter][bitshuffle]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1834,19 +3411,18 @@ TEST_CASE("Filter: Test bitshuffle", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1854,18 +3430,16 @@ TEST_CASE("Filter: Test bitshuffle", "[filter]") {
   CHECK(pipeline.add_filter(BitshuffleFilter()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset((i * sizeof(uint64_t)));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -1874,42 +3448,165 @@ TEST_CASE("Filter: Test bitshuffle", "[filter]") {
     const uint32_t nelts2 = 1001;
     const uint64_t tile_size2 = nelts2 * sizeof(uint32_t);
 
-    Buffer buffer2;
-    buffer2.realloc(tile_size2);
-    CHECK(buffer2.size() == 0);
-    CHECK(buffer2.alloced_size() == tile_size2);
+    Tile tile2;
+    tile2.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT32,
+        tile_size2,
+        sizeof(uint32_t),
+        dim_num);
 
-    for (uint64_t i = 0; i < nelts2; i++) {
-      buffer2.set_offset(i * sizeof(uint32_t));
-      CHECK(buffer2.write(&i, sizeof(uint32_t)).ok());
+    // Set up test data
+    for (uint32_t i = 0; i < nelts2; i++) {
+      CHECK(tile2.write(&i, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
     }
-    CHECK(buffer2.size() == tile_size2);
 
-    Tile tile2(Datatype::UINT32, cell_size, dim_num, &buffer2, false);
-
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile2, &tp).ok());
-    CHECK(tile2.buffer()->size() == 0);
-    CHECK(tile2.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile2, nullptr, &tp).ok());
+    CHECK(tile2.size() == 0);
+    CHECK(tile2.filtered_buffer().size() != 0);
+    CHECK(tile2.alloc_data(nelts2 * sizeof(uint32_t)).ok());
     CHECK(
         pipeline.run_reverse(&test::g_helper_stats, &tile2, &tp, config).ok());
-    CHECK(tile2.buffer()->size() != 0);
-    CHECK(tile2.filtered_buffer()->size() == 0);
-    CHECK(tile2.buffer() == &buffer2);
-    CHECK(buffer2.size() == tile_size2);
+    CHECK(tile2.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts2; i++) {
       uint32_t elt = 0;
-      buffer2.set_offset(i * sizeof(uint32_t));
-      CHECK(buffer2.read(&elt, sizeof(uint32_t)).ok());
+      CHECK(tile2.read(&elt, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
       CHECK(elt == i);
     }
-
-    buffer2.clear();
   }
-
-  buffer.clear();
 }
 
-TEST_CASE("Filter: Test byteshuffle", "[filter]") {
+TEST_CASE("Filter: Test bitshuffle var", "[filter][bitshuffle][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+  }
+
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(BitshuffleFilter()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  SECTION("- Indivisible by 8") {
+    Tile::set_max_tile_chunk_size(80);
+    const uint32_t nelts2 = 1001;
+    const uint64_t tile_size2 = nelts2 * sizeof(uint32_t);
+
+    Tile tile2;
+    tile2.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT32,
+        tile_size2,
+        sizeof(uint32_t),
+        dim_num);
+
+    // Set up test data
+    for (uint32_t i = 0; i < nelts2; i++) {
+      CHECK(tile2.write(&i, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
+    }
+
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile2, &offsets_tile, &tp)
+            .ok());
+    CHECK(tile2.size() == 0);
+    CHECK(tile2.filtered_buffer().size() != 0);
+    CHECK(tile2.alloc_data(nelts2 * sizeof(uint32_t)).ok());
+    CHECK(
+        pipeline.run_reverse(&test::g_helper_stats, &tile2, &tp, config).ok());
+    CHECK(tile2.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts2; i++) {
+      uint32_t elt = 0;
+      CHECK(tile2.read(&elt, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
+}
+
+TEST_CASE("Filter: Test byteshuffle", "[filter][byteshuffle]") {
   tiledb::sm::Config config;
 
   // Set up test data
@@ -1918,19 +3615,18 @@ TEST_CASE("Filter: Test byteshuffle", "[filter]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   FilterPipeline pipeline;
   ThreadPool tp;
@@ -1938,18 +3634,16 @@ TEST_CASE("Filter: Test byteshuffle", "[filter]") {
   CHECK(pipeline.add_filter(ByteshuffleFilter()).ok());
 
   SECTION("- Single stage") {
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
@@ -1958,39 +3652,162 @@ TEST_CASE("Filter: Test byteshuffle", "[filter]") {
     const uint32_t nelts2 = 1001;
     const uint64_t tile_size2 = nelts2 * sizeof(uint32_t);
 
-    Buffer buffer2;
-    buffer2.realloc(tile_size2);
-    CHECK(buffer2.size() == 0);
-    CHECK(buffer2.alloced_size() == tile_size2);
+    Tile tile2;
+    tile2.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT32,
+        tile_size2,
+        sizeof(uint32_t),
+        dim_num);
 
-    for (uint64_t i = 0; i < nelts2; i++) {
-      buffer2.set_offset(i * sizeof(uint32_t));
-      CHECK(buffer2.write(&i, sizeof(uint32_t)).ok());
+    // Set up test data
+    for (uint32_t i = 0; i < nelts2; i++) {
+      CHECK(tile2.write(&i, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
     }
-    CHECK(buffer2.size() == tile_size2);
 
-    Tile tile2(Datatype::UINT32, cell_size, dim_num, &buffer2, false);
-
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile2, &tp).ok());
-    CHECK(tile2.buffer()->size() == 0);
-    CHECK(tile2.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile2, nullptr, &tp).ok());
+    CHECK(tile2.size() == 0);
+    CHECK(tile2.filtered_buffer().size() != 0);
+    CHECK(tile2.alloc_data(nelts2 * sizeof(uint32_t)).ok());
     CHECK(
         pipeline.run_reverse(&test::g_helper_stats, &tile2, &tp, config).ok());
-    CHECK(tile2.buffer()->size() != 0);
-    CHECK(tile2.filtered_buffer()->size() == 0);
-    CHECK(tile2.buffer() == &buffer2);
-    CHECK(buffer2.size() == tile_size2);
+    CHECK(tile2.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts2; i++) {
       uint32_t elt = 0;
-      buffer2.set_offset(i * sizeof(uint32_t));
-      CHECK(buffer2.read(&elt, sizeof(uint32_t)).ok());
+      CHECK(tile2.read(&elt, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
       CHECK(elt == i);
     }
+  }
+}
 
-    buffer2.clear();
+TEST_CASE("Filter: Test byteshuffle var", "[filter][byteshuffle][var]") {
+  tiledb::sm::Config config;
+
+  const uint64_t nelts = 100;
+  const uint64_t tile_size = nelts * sizeof(uint64_t);
+  const uint64_t cell_size = sizeof(uint64_t);
+  const uint32_t dim_num = 0;
+
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < nelts; i++) {
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
 
-  buffer.clear();
+  // Set up test data
+  std::vector<uint64_t> sizes{
+      0,
+      32,   // Chunk0: 4 cells.
+      80,   // 10 cells, still makes it into this chunk as current size < 50%.
+      48,   // Chunk1: 6 cells.
+      88,   // Chunk2: 11 cells, new size > 50% and > than 10 cells.
+      56,   // Chunk3: 7 cells.
+      72,   // Chunk4: 9 cells, new size > 50%.
+      8,    // Chunk4: 10 cell, full.
+      80,   // Chunk5: 10 cells.
+      160,  // Chunk6: 20 cells.
+      16,   // Chunk7: 2 cells.
+      16,   // Chunk7: 4 cells.
+      16,   // Chunk7: 6 cells.
+      16,   // Chunk7: 8 cells.
+      16,   // Chunk7: 10 cells.
+  };        // Chunk8: 12 cells.
+
+  std::vector<uint64_t> out_sizes{112, 48, 88, 56, 80, 80, 160, 80, 96};
+
+  std::vector<uint64_t> offsets(sizes.size());
+  uint64_t offset = 0;
+  for (uint64_t i = 0; i < offsets.size() - 1; i++) {
+    offsets[i] = offset;
+    offset += sizes[i + 1];
+  }
+  offsets[offsets.size() - 1] = offset;
+
+  const uint64_t offsets_tile_size =
+      offsets.size() * constants::cell_var_offset_size;
+
+  Tile offsets_tile;
+  offsets_tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      offsets_tile_size,
+      constants::cell_var_offset_size,
+      dim_num);
+
+  // Set up test data
+  for (uint64_t i = 0; i < offsets.size(); i++) {
+    CHECK(offsets_tile
+              .write(
+                  &offsets[i],
+                  i * constants::cell_var_offset_size,
+                  constants::cell_var_offset_size)
+              .ok());
+  }
+
+  FilterPipeline pipeline;
+  ThreadPool tp;
+  CHECK(tp.init(4).ok());
+  CHECK(pipeline.add_filter(ByteshuffleFilter()).ok());
+
+  SECTION("- Single stage") {
+    Tile::set_max_tile_chunk_size(80);
+    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &offsets_tile, &tp)
+              .ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
+    CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
+    CHECK(tile.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts; i++) {
+      uint64_t elt = 0;
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  SECTION("- Uneven number of elements") {
+    Tile::set_max_tile_chunk_size(80);
+    const uint32_t nelts2 = 1001;
+    const uint64_t tile_size2 = nelts2 * sizeof(uint32_t);
+
+    Tile tile2;
+    tile2.init_unfiltered(
+        constants::format_version,
+        Datatype::UINT32,
+        tile_size2,
+        sizeof(uint32_t),
+        dim_num);
+
+    // Set up test data
+    for (uint32_t i = 0; i < nelts2; i++) {
+      CHECK(tile2.write(&i, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
+    }
+
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile2, &offsets_tile, &tp)
+            .ok());
+    CHECK(tile2.size() == 0);
+    CHECK(tile2.filtered_buffer().size() != 0);
+    CHECK(tile2.alloc_data(nelts2 * sizeof(uint32_t)).ok());
+    CHECK(
+        pipeline.run_reverse(&test::g_helper_stats, &tile2, &tp, config).ok());
+    CHECK(tile2.filtered_buffer().size() == 0);
+    for (uint64_t i = 0; i < nelts2; i++) {
+      uint32_t elt = 0;
+      CHECK(tile2.read(&elt, i * sizeof(uint32_t), sizeof(uint32_t)).ok());
+      CHECK(elt == i);
+    }
+  }
+
+  Tile::set_max_tile_chunk_size(constants::max_tile_chunk_size);
 }
 
 TEST_CASE("Filter: Test encryption", "[filter][encryption]") {
@@ -2002,19 +3819,18 @@ TEST_CASE("Filter: Test encryption", "[filter][encryption]") {
   const uint64_t cell_size = sizeof(uint64_t);
   const uint32_t dim_num = 0;
 
-  Buffer buffer;
-  buffer.realloc(tile_size);
-  CHECK(buffer.size() == 0);
-  CHECK(buffer.alloced_size() == tile_size);
+  Tile tile;
+  tile.init_unfiltered(
+      constants::format_version,
+      Datatype::UINT64,
+      tile_size,
+      cell_size,
+      dim_num);
 
   // Set up test data
   for (uint64_t i = 0; i < nelts; i++) {
-    buffer.set_offset(i * sizeof(uint64_t));
-    CHECK(buffer.write(&i, sizeof(uint64_t)).ok());
+    CHECK(tile.write(&i, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
   }
-  CHECK(buffer.size() == tile_size);
-
-  Tile tile(Datatype::UINT64, cell_size, dim_num, &buffer, false);
 
   SECTION("- AES-256-GCM") {
     FilterPipeline pipeline;
@@ -2023,7 +3839,8 @@ TEST_CASE("Filter: Test encryption", "[filter][encryption]") {
     CHECK(pipeline.add_filter(EncryptionAES256GCMFilter()).ok());
 
     // No key set
-    CHECK(!pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        !pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
 
     // Create and set a key
     char key[32];
@@ -2033,25 +3850,25 @@ TEST_CASE("Filter: Test encryption", "[filter][encryption]") {
     CHECK(filter->set_key(key).ok());
 
     // Check success
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
-    CHECK(tile.buffer()->size() == 0);
-    CHECK(tile.filtered_buffer()->size() != 0);
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
+    CHECK(tile.size() == 0);
+    CHECK(tile.filtered_buffer().size() != 0);
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
 
     // Check error decrypting with wrong key.
-    CHECK(pipeline.run_forward(&test::g_helper_stats, &tile, &tp).ok());
+    CHECK(
+        pipeline.run_forward(&test::g_helper_stats, &tile, nullptr, &tp).ok());
     key[0]++;
     CHECK(filter->set_key(key).ok());
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(
         !pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
 
@@ -2060,18 +3877,13 @@ TEST_CASE("Filter: Test encryption", "[filter][encryption]") {
     // true in general use of the filter pipeline.
     key[0]--;
     CHECK(filter->set_key(key).ok());
+    CHECK(tile.alloc_data(nelts * sizeof(uint64_t)).ok());
     CHECK(pipeline.run_reverse(&test::g_helper_stats, &tile, &tp, config).ok());
-    CHECK(tile.buffer()->size() != 0);
-    CHECK(tile.filtered_buffer()->size() == 0);
-    CHECK(tile.buffer() == &buffer);
-    CHECK(buffer.size() == nelts * sizeof(uint64_t));
+    CHECK(tile.filtered_buffer().size() == 0);
     for (uint64_t i = 0; i < nelts; i++) {
       uint64_t elt = 0;
-      buffer.set_offset(i * sizeof(uint64_t));
-      CHECK(buffer.read(&elt, sizeof(uint64_t)).ok());
+      CHECK(tile.read(&elt, i * sizeof(uint64_t), sizeof(uint64_t)).ok());
       CHECK(elt == i);
     }
   }
-
-  buffer.clear();
 }
