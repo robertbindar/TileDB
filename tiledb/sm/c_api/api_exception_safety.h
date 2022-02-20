@@ -40,16 +40,15 @@
 #include "tiledb/common/status.h"
 
 struct CAPIEntryPointBase {
-  using Status = tiledb::common::Status;
   static void action(const std::bad_alloc& e) {
-    auto cst = Status::Error(
+    auto cst = tiledb::common::Status_Error(
         std::string("Internal TileDB uncaught std::bad_alloc exception; ") +
         e.what());
     LOG_STATUS(cst);
   }
 
   static void action(const std::exception& e) {
-    auto cst = Status::Error(
+    auto cst = tiledb::common::Status_Error(
         std::string("Internal TileDB uncaught exception; ") + e.what());
     LOG_STATUS(cst);
   }
