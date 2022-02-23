@@ -32,5 +32,5 @@
  */
 
 #if !defined(__SSE2__)
-  #error __SSE2__ is not defined
+#error __SSE2__ is not defined
 #endif

@@ -32,5 +32,5 @@
  */
 
 #if !defined(__AVX2__)
-  #error __AVX2__ is not defined
+#error __AVX2__ is not defined
 #endif
