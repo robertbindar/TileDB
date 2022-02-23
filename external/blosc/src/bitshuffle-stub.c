@@ -33,17 +33,20 @@
  */
 #include "bitshuffle-generic.h"
 
-BLOSC_NO_EXPORT int64_t
-blosc_internal_bshuf_trans_bit_elem_scal(const void* in, void* out, const size_t size,
-                                         const size_t elem_size, void* tmp_buf)
-{
+BLOSC_NO_EXPORT int64_t blosc_internal_bshuf_trans_bit_elem_scal(
+    const void* in,
+    void* out,
+    const size_t size,
+    const size_t elem_size,
+    void* tmp_buf) {
   return 0;
 }
 
-BLOSC_NO_EXPORT int64_t
-blosc_internal_bshuf_untrans_bit_elem_scal(const void* in, void* out, const size_t size,
-                                         const size_t elem_size, void* tmp_buf)
-{
+BLOSC_NO_EXPORT int64_t blosc_internal_bshuf_untrans_bit_elem_scal(
+    const void* in,
+    void* out,
+    const size_t size,
+    const size_t elem_size,
+    void* tmp_buf) {
   return 0;
 }
-

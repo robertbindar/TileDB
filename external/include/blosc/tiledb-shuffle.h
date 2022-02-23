@@ -38,8 +38,8 @@
 #include "shuffle.h"
 
 namespace blosc {
-  const auto &shuffle = blosc_internal_shuffle;
-  const auto &unshuffle = blosc_internal_unshuffle;
-} // namespace blosc
+const auto& shuffle = blosc_internal_shuffle;
+const auto& unshuffle = blosc_internal_unshuffle;
+}  // namespace blosc
 
-#endif // TILEDB_SHUFFLE_H
+#endif  // TILEDB_SHUFFLE_H
