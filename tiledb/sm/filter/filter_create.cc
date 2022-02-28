@@ -121,9 +121,10 @@ tiledb::sm::FilterCreate::deserialize(
       if (!st.ok()) {
         return {st, nullopt};
       }
-      return {Status::Ok(),
-              tiledb::common::make_shared<CompressionFilter>(
-                  HERE(), compressor, compression_level)};
+      return {
+          Status::Ok(),
+          tiledb::common::make_shared<CompressionFilter>(
+              HERE(), compressor, compression_level)};
     }
     case FilterType::FILTER_BIT_WIDTH_REDUCTION: {
       uint32_t max_window_size;
@@ -131,47 +132,52 @@ tiledb::sm::FilterCreate::deserialize(
       if (!st.ok()) {
         return {st, nullopt};
       }
-      return {Status::Ok(),
-              tiledb::common::make_shared<BitWidthReductionFilter>(
-                  HERE(), max_window_size)};
+      return {
+          Status::Ok(),
+          tiledb::common::make_shared<BitWidthReductionFilter>(
+              HERE(), max_window_size)};
     }
     case FilterType::FILTER_BITSHUFFLE:
-      return {Status::Ok(),
-              tiledb::common::make_shared<BitshuffleFilter>(HERE())};
+      return {
+          Status::Ok(), tiledb::common::make_shared<BitshuffleFilter>(HERE())};
     case FilterType::FILTER_BYTESHUFFLE:
-      return {Status::Ok(),
-              tiledb::common::make_shared<ByteshuffleFilter>(HERE())};
+      return {
+          Status::Ok(), tiledb::common::make_shared<ByteshuffleFilter>(HERE())};
     case FilterType::FILTER_POSITIVE_DELTA: {
       uint32_t max_window_size;
       st = buff->read(&max_window_size, sizeof(uint32_t));
       if (!st.ok()) {
         return {st, nullopt};
       } else {
-        return {Status::Ok(),
-                tiledb::common::make_shared<PositiveDeltaFilter>(
-                    HERE(), max_window_size)};
+        return {
+            Status::Ok(),
+            tiledb::common::make_shared<PositiveDeltaFilter>(
+                HERE(), max_window_size)};
       }
     }
     case FilterType::INTERNAL_FILTER_AES_256_GCM:
       if (encryption_key.encryption_type() ==
           tiledb::sm::EncryptionType::AES_256_GCM) {
-        return {Status::Ok(),
-                tiledb::common::make_shared<EncryptionAES256GCMFilter>(
-                    HERE(), encryption_key)};
+        return {
+            Status::Ok(),
+            tiledb::common::make_shared<EncryptionAES256GCMFilter>(
+                HERE(), encryption_key)};
       } else {
-        return {Status::Ok(),
-                tiledb::common::make_shared<EncryptionAES256GCMFilter>(HERE())};
+        return {
+            Status::Ok(),
+            tiledb::common::make_shared<EncryptionAES256GCMFilter>(HERE())};
       }
     case FilterType::FILTER_CHECKSUM_MD5:
-      return {Status::Ok(),
-              tiledb::common::make_shared<ChecksumMD5Filter>(HERE())};
+      return {
+          Status::Ok(), tiledb::common::make_shared<ChecksumMD5Filter>(HERE())};
     case FilterType::FILTER_CHECKSUM_SHA256:
-      return {Status::Ok(),
-              tiledb::common::make_shared<ChecksumSHA256Filter>(HERE())};
+      return {
+          Status::Ok(),
+          tiledb::common::make_shared<ChecksumSHA256Filter>(HERE())};
     default:
       assert(false);
-      return {Status_FilterError("Deserialization error; unknown type"),
-              nullopt};
+      return {
+          Status_FilterError("Deserialization error; unknown type"), nullopt};
   }
 }
 

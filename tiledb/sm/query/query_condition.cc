@@ -579,10 +579,11 @@ QueryCondition::apply_clause(
           clause, stride, var_size, nullable, fill_value, result_cell_slabs);
       break;
     default:
-      return {Status_QueryConditionError(
-                  "Cannot perform query comparison; Unknown query "
-                  "condition operator"),
-              std::nullopt};
+      return {
+          Status_QueryConditionError(
+              "Cannot perform query comparison; Unknown query "
+              "condition operator"),
+          std::nullopt};
   }
 
   return {Status::Ok(), std::move(ret)};
@@ -669,11 +670,12 @@ QueryCondition::apply_clause(
     case Datatype::STRING_UCS2:
     case Datatype::STRING_UCS4:
     default:
-      return {Status_QueryConditionError(
-                  "Cannot perform query comparison; Unsupported query "
-                  "conditional type on " +
-                  clause.field_name_),
-              std::nullopt};
+      return {
+          Status_QueryConditionError(
+              "Cannot perform query comparison; Unsupported query "
+              "conditional type on " +
+              clause.field_name_),
+          std::nullopt};
   }
 
   return {Status::Ok(), std::nullopt};

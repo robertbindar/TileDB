@@ -2043,16 +2043,17 @@ TEST_CASE_METHOD(
   // Test get tile 1
   WriterTile tile1_1;
   CHECK(tiler1.get_tile(1, "a", &tile1_1).ok());
-  std::vector<int32_t> c_data1_1 = {4,
-                                    44,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value,
-                                    fill_value};
+  std::vector<int32_t> c_data1_1 = {
+      4,
+      44,
+      fill_value,
+      fill_value,
+      fill_value,
+      fill_value,
+      fill_value,
+      fill_value,
+      fill_value,
+      fill_value};
   CHECK(check_tile<int32_t>(&tile1_1, c_data1_1));
 
   // Create new subarray
@@ -2158,11 +2159,12 @@ TEST_CASE_METHOD(
   CHECK(check_tile<int32_t>(&tile1_1_a1, c_data1_1_a1));
   WriterTile tile1_1_a2;
   CHECK(tiler1.get_tile(1, "a2", &tile1_1_a2).ok());
-  std::vector<double> c_data1_1_a2 = {4.4,
-                                      double(fill_value),
-                                      double(fill_value),
-                                      double(fill_value),
-                                      double(fill_value)};
+  std::vector<double> c_data1_1_a2 = {
+      4.4,
+      double(fill_value),
+      double(fill_value),
+      double(fill_value),
+      double(fill_value)};
   CHECK(check_tile<double>(&tile1_1_a2, c_data1_1_a2));
 
   // Create new subarray
@@ -2829,21 +2831,22 @@ TEST_CASE_METHOD(
   std::vector<int32_t> buff_a = {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
   (void)buff_a;  // Used only as a reference
-  std::vector<uint64_t> buff_a_off = {0,
-                                      1 * sizeof(int32_t),
-                                      3 * sizeof(int32_t),
-                                      6 * sizeof(int32_t),
-                                      10 * sizeof(int32_t),
-                                      15 * sizeof(int32_t),
-                                      16 * sizeof(int32_t),
-                                      18 * sizeof(int32_t),
-                                      21 * sizeof(int32_t),
-                                      25 * sizeof(int32_t),
-                                      30 * sizeof(int32_t),
-                                      31 * sizeof(int32_t),
-                                      33 * sizeof(int32_t),
-                                      36 * sizeof(int32_t),
-                                      40 * sizeof(int32_t)};
+  std::vector<uint64_t> buff_a_off = {
+      0,
+      1 * sizeof(int32_t),
+      3 * sizeof(int32_t),
+      6 * sizeof(int32_t),
+      10 * sizeof(int32_t),
+      15 * sizeof(int32_t),
+      16 * sizeof(int32_t),
+      18 * sizeof(int32_t),
+      21 * sizeof(int32_t),
+      25 * sizeof(int32_t),
+      30 * sizeof(int32_t),
+      31 * sizeof(int32_t),
+      33 * sizeof(int32_t),
+      36 * sizeof(int32_t),
+      40 * sizeof(int32_t)};
   uint64_t buff_a_off_size = buff_a_off.size() * sizeof(uint64_t);
   std::vector<int32_t> buff_a_val = {
       1,  2,  2,  3,  3,  3,  4,  4,  4,  4,  5,  5,  5,  5,  5,
@@ -3006,24 +3009,25 @@ TEST_CASE_METHOD(
 
   // Create DenseTiler
   buff_a = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18};
-  buff_a_off = {0,
-                1 * sizeof(int32_t),
-                3 * sizeof(int32_t),
-                6 * sizeof(int32_t),
-                10 * sizeof(int32_t),
-                15 * sizeof(int32_t),
-                16 * sizeof(int32_t),
-                18 * sizeof(int32_t),
-                21 * sizeof(int32_t),
-                25 * sizeof(int32_t),
-                30 * sizeof(int32_t),
-                31 * sizeof(int32_t),
-                33 * sizeof(int32_t),
-                36 * sizeof(int32_t),
-                40 * sizeof(int32_t),
-                45 * sizeof(int32_t),
-                46 * sizeof(int32_t),
-                48 * sizeof(int32_t)};
+  buff_a_off = {
+      0,
+      1 * sizeof(int32_t),
+      3 * sizeof(int32_t),
+      6 * sizeof(int32_t),
+      10 * sizeof(int32_t),
+      15 * sizeof(int32_t),
+      16 * sizeof(int32_t),
+      18 * sizeof(int32_t),
+      21 * sizeof(int32_t),
+      25 * sizeof(int32_t),
+      30 * sizeof(int32_t),
+      31 * sizeof(int32_t),
+      33 * sizeof(int32_t),
+      36 * sizeof(int32_t),
+      40 * sizeof(int32_t),
+      45 * sizeof(int32_t),
+      46 * sizeof(int32_t),
+      48 * sizeof(int32_t)};
   buff_a_off_size = buff_a_off.size() * sizeof(uint64_t);
   buff_a_val = {1,  2,  2,  3,  3,  3,  4,  4,  4,  4,  5,  5,  5,
                 5,  5,  6,  7,  7,  8,  8,  8,  9,  9,  9,  9,  10,
@@ -3152,22 +3156,23 @@ TEST_CASE_METHOD(
   std::vector<int32_t> buff_a = {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
   (void)buff_a;  // Used only as a reference
-  std::vector<uint64_t> buff_a_off = {0,
-                                      1 * sizeof(int32_t),
-                                      3 * sizeof(int32_t),
-                                      6 * sizeof(int32_t),
-                                      10 * sizeof(int32_t),
-                                      15 * sizeof(int32_t),
-                                      16 * sizeof(int32_t),
-                                      18 * sizeof(int32_t),
-                                      21 * sizeof(int32_t),
-                                      25 * sizeof(int32_t),
-                                      30 * sizeof(int32_t),
-                                      31 * sizeof(int32_t),
-                                      33 * sizeof(int32_t),
-                                      36 * sizeof(int32_t),
-                                      40 * sizeof(int32_t),
-                                      45 * sizeof(int32_t)};  // Extra element
+  std::vector<uint64_t> buff_a_off = {
+      0,
+      1 * sizeof(int32_t),
+      3 * sizeof(int32_t),
+      6 * sizeof(int32_t),
+      10 * sizeof(int32_t),
+      15 * sizeof(int32_t),
+      16 * sizeof(int32_t),
+      18 * sizeof(int32_t),
+      21 * sizeof(int32_t),
+      25 * sizeof(int32_t),
+      30 * sizeof(int32_t),
+      31 * sizeof(int32_t),
+      33 * sizeof(int32_t),
+      36 * sizeof(int32_t),
+      40 * sizeof(int32_t),
+      45 * sizeof(int32_t)};  // Extra element
   uint64_t buff_a_off_size = buff_a_off.size() * sizeof(uint64_t);
   std::vector<int32_t> buff_a_val = {
       1,  2,  2,  3,  3,  3,  4,  4,  4,  4,  5,  5,  5,  5,  5,
@@ -3331,25 +3336,26 @@ TEST_CASE_METHOD(
 
   // Create DenseTiler
   buff_a = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18};
-  buff_a_off = {0,
-                1 * sizeof(int32_t),
-                3 * sizeof(int32_t),
-                6 * sizeof(int32_t),
-                10 * sizeof(int32_t),
-                15 * sizeof(int32_t),
-                16 * sizeof(int32_t),
-                18 * sizeof(int32_t),
-                21 * sizeof(int32_t),
-                25 * sizeof(int32_t),
-                30 * sizeof(int32_t),
-                31 * sizeof(int32_t),
-                33 * sizeof(int32_t),
-                36 * sizeof(int32_t),
-                40 * sizeof(int32_t),
-                45 * sizeof(int32_t),
-                46 * sizeof(int32_t),
-                48 * sizeof(int32_t),
-                49 * sizeof(int32_t)};  // Extra element
+  buff_a_off = {
+      0,
+      1 * sizeof(int32_t),
+      3 * sizeof(int32_t),
+      6 * sizeof(int32_t),
+      10 * sizeof(int32_t),
+      15 * sizeof(int32_t),
+      16 * sizeof(int32_t),
+      18 * sizeof(int32_t),
+      21 * sizeof(int32_t),
+      25 * sizeof(int32_t),
+      30 * sizeof(int32_t),
+      31 * sizeof(int32_t),
+      33 * sizeof(int32_t),
+      36 * sizeof(int32_t),
+      40 * sizeof(int32_t),
+      45 * sizeof(int32_t),
+      46 * sizeof(int32_t),
+      48 * sizeof(int32_t),
+      49 * sizeof(int32_t)};  // Extra element
   buff_a_off_size = buff_a_off.size() * sizeof(uint64_t);
   buff_a_val = {1,  2,  2,  3,  3,  3,  4,  4,  4,  4,  5,  5,  5,
                 5,  5,  6,  7,  7,  8,  8,  8,  9,  9,  9,  9,  10,

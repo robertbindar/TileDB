@@ -119,8 +119,8 @@ struct ResultCoords {
     auto type = dim.type();
     if (dim.var_size()) {
       auto x{tile_->coord_string(pos_, dim_idx)};
-      return tdb::DynamicTypedDatumView{UntypedDatumView{x.data(), x.size()},
-                                        type};
+      return tdb::DynamicTypedDatumView{
+          UntypedDatumView{x.data(), x.size()}, type};
     } else {
       return tdb::DynamicTypedDatumView{
           UntypedDatumView{coord(dim_idx), dim.coord_size()}, type};

@@ -662,8 +662,9 @@ class Interval : public detail::IntervalBase {
          * When both bounds are the same type, comparison is the same as the
          * underlying set.
          */
-        return left_bound < right_bound ? -1 :
-                                          left_bound == right_bound ? 0 : +1;
+        return left_bound < right_bound  ? -1 :
+               left_bound == right_bound ? 0 :
+                                           +1;
       }
       if (is_open_ && right.is_closed_) {
         if (right_bound <= left_bound) {
@@ -719,8 +720,9 @@ class Interval : public detail::IntervalBase {
          * When both bounds are the same type, comparison is the same as the
          * underlying set.
          */
-        return left_bound < right_bound ? -1 :
-                                          left_bound == right_bound ? 0 : +1;
+        return left_bound < right_bound  ? -1 :
+               left_bound == right_bound ? 0 :
+                                           +1;
       }
       if (is_open_ && right.is_closed_) {
         /*
@@ -782,14 +784,14 @@ class Interval : public detail::IntervalBase {
       T left_bound = bound_.value();
       T right_bound = right.bound_.value();
       if (is_open_ && right.is_open_) {
-        return left_bound <= right_bound ?
-                   -1 :
-                   Traits::adjacent(right_bound, left_bound) ? 0 : +1;
+        return left_bound <= right_bound                 ? -1 :
+               Traits::adjacent(right_bound, left_bound) ? 0 :
+                                                           +1;
       }
       if (is_closed_ && right.is_closed_) {
-        return right_bound <= left_bound ?
-                   +1 :
-                   Traits::adjacent(left_bound, right_bound) ? 0 : -1;
+        return right_bound <= left_bound                 ? +1 :
+               Traits::adjacent(left_bound, right_bound) ? 0 :
+                                                           -1;
       }
       /*
        * Bounds are mixed
@@ -1395,8 +1397,8 @@ class Interval : public detail::IntervalBase {
         (c_upper < 0 || (c_upper == 0 && right_upper.is_closed_)) ?
             right_upper :
             left_upper;
-    return {true,
-            Interval(adjust_bounds(least_lower_bound, greatest_upper_bound))};
+    return {
+        true, Interval(adjust_bounds(least_lower_bound, greatest_upper_bound))};
   }
 
   /**
@@ -1473,10 +1475,11 @@ class Interval : public detail::IntervalBase {
     // Assert: c == 0 and thus cut_point is finite
     // Assert: c == 0 and thus cut_point is a member of this interval
 
-    return {Interval(adjust_bounds(
-                BoundLower(), Bound(cut_point, !lower_open_upper_closed))),
-            Interval(adjust_bounds(
-                Bound(cut_point, lower_open_upper_closed), BoundUpper()))};
+    return {
+        Interval(adjust_bounds(
+            BoundLower(), Bound(cut_point, !lower_open_upper_closed))),
+        Interval(adjust_bounds(
+            Bound(cut_point, lower_open_upper_closed), BoundUpper()))};
   }
 
 };  // namespace tiledb::common

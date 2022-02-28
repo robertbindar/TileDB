@@ -36,11 +36,11 @@
 
 namespace blosc {
 namespace detail {
-  class dummy_user
-  {
-    template<class T>
-    short init();
-  };
-}}
+class dummy_user {
+  template <class T>
+  short init();
+};
+}  // namespace detail
+}  // namespace blosc
 
 #endif  // TILEDB_INITIALIZE_SHUFFLE_H
