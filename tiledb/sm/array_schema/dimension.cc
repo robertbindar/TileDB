@@ -249,15 +249,16 @@ std::tuple<Status, optional<std::shared_ptr<Dimension>>> Dimension::deserialize(
       return {st, nullopt};
   }
 
-  return {Status::Ok(),
-          tiledb::common::make_shared<Dimension>(
-              HERE(),
-              name,
-              datatype,
-              cell_val_num,
-              domain,
-              filter_pipeline,
-              tile_extent)};
+  return {
+      Status::Ok(),
+      tiledb::common::make_shared<Dimension>(
+          HERE(),
+          name,
+          datatype,
+          cell_val_num,
+          domain,
+          filter_pipeline,
+          tile_extent)};
 }
 
 const Range& Dimension::domain() const {

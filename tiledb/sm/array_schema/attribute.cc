@@ -163,16 +163,17 @@ std::tuple<Status, std::optional<Attribute>> Attribute::deserialize(
         buff->read(&fill_value_validity, sizeof(uint8_t)), std::nullopt);
   }
 
-  return {Status::Ok(),
-          std::optional<Attribute>(
-              std::in_place,
-              name,
-              datatype,
-              nullable,
-              cell_val_num,
-              filter_pipeline,
-              fill_value,
-              fill_value_validity)};
+  return {
+      Status::Ok(),
+      std::optional<Attribute>(
+          std::in_place,
+          name,
+          datatype,
+          nullable,
+          cell_val_num,
+          filter_pipeline,
+          fill_value,
+          fill_value_validity)};
 }
 void Attribute::dump(FILE* out) const {
   if (out == nullptr)

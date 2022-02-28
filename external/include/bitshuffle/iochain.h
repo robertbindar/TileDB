@@ -25,7 +25,7 @@
  * Usage
  * -----
  *  - Call `ioc_init` in serial block.
- *  - Each thread should create a local variable *size_t this_iter* and 
+ *  - Each thread should create a local variable *size_t this_iter* and
  *    pass its address to all function calls. Its value will be set
  *    inside the functions and is used to identify the thread.
  *  - Each thread must call each of the `ioc_get*` and `ioc_set*` methods
@@ -44,51 +44,44 @@
  *
  */
 
-
 #ifndef IOCHAIN_H
 #define IOCHAIN_H
-
 
 #include <stdlib.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
-
 #define IOC_SIZE 33
-
 
 typedef struct ioc_ptr_and_lock {
 #ifdef _OPENMP
-    omp_lock_t lock;
+  omp_lock_t lock;
 #endif
-    void *ptr;
+  void* ptr;
 } ptr_and_lock;
 
 typedef struct ioc_const_ptr_and_lock {
 #ifdef _OPENMP
-    omp_lock_t lock;
+  omp_lock_t lock;
 #endif
-    const void *ptr;
+  const void* ptr;
 } const_ptr_and_lock;
-
 
 typedef struct ioc_chain {
 #ifdef _OPENMP
-    omp_lock_t next_lock;
+  omp_lock_t next_lock;
 #endif
-    size_t next;
-    const_ptr_and_lock in_pl[IOC_SIZE];
-    ptr_and_lock out_pl[IOC_SIZE];
+  size_t next;
+  const_ptr_and_lock in_pl[IOC_SIZE];
+  ptr_and_lock out_pl[IOC_SIZE];
 } ioc_chain;
 
-
-void ioc_init(ioc_chain *C, const void *in_ptr_0, void *out_ptr_0);
-void ioc_destroy(ioc_chain *C);
-const void * ioc_get_in(ioc_chain *C, size_t *this_iter);
-void ioc_set_next_in(ioc_chain *C, size_t* this_iter, void* in_ptr);
-void * ioc_get_out(ioc_chain *C, size_t *this_iter);
-void ioc_set_next_out(ioc_chain *C, size_t *this_iter, void* out_ptr);
+void ioc_init(ioc_chain* C, const void* in_ptr_0, void* out_ptr_0);
+void ioc_destroy(ioc_chain* C);
+const void* ioc_get_in(ioc_chain* C, size_t* this_iter);
+void ioc_set_next_in(ioc_chain* C, size_t* this_iter, void* in_ptr);
+void* ioc_get_out(ioc_chain* C, size_t* this_iter);
+void ioc_set_next_out(ioc_chain* C, size_t* this_iter, void* out_ptr);
 
 #endif  // IOCHAIN_H
-

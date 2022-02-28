@@ -245,10 +245,11 @@ std::tuple<
 StorageManager::array_open_for_writes(Array* array) {
   // Checks
   if (!vfs_->supports_uri_scheme(array->array_uri()))
-    return {logger_->status(Status_StorageManagerError(
-                "Cannot open array; URI scheme unsupported.")),
-            std::nullopt,
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(
+            "Cannot open array; URI scheme unsupported.")),
+        std::nullopt,
+        std::nullopt};
 
   // Load array schemas
   auto&& [st_schemas, array_schema_latest, array_schemas_all] =
@@ -264,9 +265,10 @@ StorageManager::array_open_for_writes(Array* array) {
     err << version;
     err << ") is newer than library format version (";
     err << constants::format_version << ")";
-    return {logger_->status(Status_StorageManagerError(err.str())),
-            std::nullopt,
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(err.str())),
+        std::nullopt,
+        std::nullopt};
   }
 
   // Mark the array as open
@@ -284,10 +286,11 @@ StorageManager::array_load_fragments(
   // Check if the array is open
   auto it = open_arrays_.find(array);
   if (it == open_arrays_.end()) {
-    return {logger_->status(Status_StorageManagerError(
-                std::string("Cannot load array fragments from ") +
-                array->array_uri().to_string() + "; Array not open")),
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(
+            std::string("Cannot load array fragments from ") +
+            array->array_uri().to_string() + "; Array not open")),
+        std::nullopt};
   }
 
   // Load the fragment metadata
@@ -316,12 +319,13 @@ StorageManager::array_reopen(Array* array) {
   // Check if array is open
   auto it = open_arrays_.find(array);
   if (it == open_arrays_.end()) {
-    return {logger_->status(Status_StorageManagerError(
-                std::string("Cannot reopen array ") +
-                array->array_uri().to_string() + "; Array not open")),
-            std::nullopt,
-            std::nullopt,
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(
+            std::string("Cannot reopen array ") +
+            array->array_uri().to_string() + "; Array not open")),
+        std::nullopt,
+        std::nullopt,
+        std::nullopt};
   }
 
   return array_open_for_reads(array);
@@ -1688,17 +1692,19 @@ StorageManager::load_all_array_schemas(
   auto timer_se = stats_->start_timer("read_load_all_array_schemas");
 
   if (array_uri.is_invalid())
-    return {logger_->status(Status_StorageManagerError(
-                "Cannot load all array schemas; Invalid array URI")),
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(
+            "Cannot load all array schemas; Invalid array URI")),
+        std::nullopt};
 
   std::vector<URI> schema_uris;
   RETURN_NOT_OK_TUPLE(
       get_array_schema_uris(array_uri, &schema_uris), std::nullopt);
   if (schema_uris.empty()) {
-    return {logger_->status(Status_StorageManagerError(
-                "Cannot get the array schema vector; No array schemas found.")),
-            std::nullopt};
+    return {
+        logger_->status(Status_StorageManagerError(
+            "Cannot get the array schema vector; No array schemas found.")),
+        std::nullopt};
   }
 
   std::vector<ArraySchema*> schema_vector;

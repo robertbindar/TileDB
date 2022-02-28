@@ -1396,9 +1396,10 @@ TEST_CASE_METHOD(
                  {TILEDB_NO_ENCRYPTION, TILEDB_AES_256_GCM}) {
               for (const tiledb_layout_t write_order :
                    {TILEDB_ROW_MAJOR, TILEDB_UNORDERED}) {
-                for (const tiledb_layout_t read_order : {TILEDB_ROW_MAJOR,
-                                                         TILEDB_UNORDERED,
-                                                         TILEDB_GLOBAL_ORDER}) {
+                for (const tiledb_layout_t read_order :
+                     {TILEDB_ROW_MAJOR,
+                      TILEDB_UNORDERED,
+                      TILEDB_GLOBAL_ORDER}) {
                   vector<test_dim_t> test_dims;
                   for (const test_dim_t& dim : dims) {
                     test_dims.emplace_back(dim);
