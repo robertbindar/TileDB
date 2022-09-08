@@ -255,9 +255,21 @@ struct CPPFixedTileMetadataFx {
       query.set_validity_buffer("a", a_val);
     }
 
-    // query.submit();
-    // query.finalize();
-    test::submit_and_finalize_serialized_query(ctx_, query);
+    bool serialized_writes = false;
+    SECTION("no serialization") {
+      serialized_writes = false;
+    }
+    SECTION("serialization enabled global order write") {
+#ifdef TILEDB_SERIALIZATION
+      serialized_writes = true;
+#endif
+    }
+    if (!serialized_writes) {
+      query.submit();
+      query.finalize();
+    } else {
+      test::submit_and_finalize_serialized_query(ctx_, query);
+    }
     array.close();
   }
 
@@ -794,9 +806,21 @@ struct CPPVarTileMetadataFx {
       query.set_validity_buffer("a", a_val);
     }
 
-    // query.submit();
-    // query.finalize();
-    test::submit_and_finalize_serialized_query(ctx_, query);
+    bool serialized_writes = false;
+    SECTION("no serialization") {
+      serialized_writes = false;
+    }
+    SECTION("serialization enabled global order write") {
+#ifdef TILEDB_SERIALIZATION
+      serialized_writes = true;
+#endif
+    }
+    if (!serialized_writes) {
+      query.submit();
+      query.finalize();
+    } else {
+      test::submit_and_finalize_serialized_query(ctx_, query);
+    }
     array.close();
   }
 
